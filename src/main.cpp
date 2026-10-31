@@ -605,6 +605,9 @@ static void update_ui() {
         snprintf(recTxt, sizeof(recTxt), "● REC BANK: %u ROWS", Logger.getBankRows());
         lv_label_set_text(lbl_bank_log, recTxt);
         lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_ROSE), 0);
+    } else {
+        lv_label_set_text(lbl_bank_log, "START BANK LOG (REC SD)");
+        lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_PANEL_INNER), 0);
     }
 
     float vSum = 0;
