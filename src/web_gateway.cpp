@@ -1,5 +1,6 @@
 #include "web_gateway.h"
 #include "index_html_gz.h"
+#include "sd_logger.h"
 
 WebGateway Gateway;
 
@@ -186,9 +187,10 @@ void WebGateway::setupRoutes() {
         doc["scan_msg"] = "";
         doc["port"] = "UART2 (GPIO 44)";
         doc["baud"] = 9600;
-        doc["log_on"] = false;
-        doc["log_path"] = nullptr;
-        doc["log_rows"] = 0;
+        doc["log_on"] = Logger.isBankLogging();
+        doc["log_path"] = Logger.isBankLogging() ? "/bms_bank_log.csv" : nullptr;
+        doc["log_rows"] = Logger.getBankRows();
+        doc["sd_card"] = Logger.isAvailable();
         doc["ts"] = "Online";
 
         JsonArray activeAddrs = doc.createNestedArray("active_addrs");
@@ -220,7 +222,7 @@ void WebGateway::setupRoutes() {
                     p["addr_hex"] = addrHex;
                     p["online"] = true;
                     p["err"] = "";
-                    p["log_on"] = false;
+                    p["log_on"] = Logger.isPackLogging(i);
 
                     JsonObject parsed = p.createNestedObject("parsed");
                     parsed["voltage"] = _packs[i].voltage;
@@ -359,6 +361,82 @@ void WebGateway::setupRoutes() {
         String json;
         serializeJson(doc, json);
         request->send(200, "application/json", json);
+    });
+
+    // Control SD Logger via Web
+    // POST /api/log  {"on": true/false, "addr": "0x01"} (addr optional; without addr = bank log)
+    _server->on("/api/log", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+      [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        DynamicJsonDocument reqDoc(512);
+        DeserializationError err = deserializeJson(reqDoc, data, len);
+        if (!err) {
+            bool on = reqDoc["on"] | false;
+            if (reqDoc.containsKey("addr")) {
+                const char* addrStr = reqDoc["addr"];
+                uint8_t packAddr = 0;
+                if (addrStr && addrStr[0] == '0' && (addrStr[1] == 'x' || addrStr[1] == 'X')) {
+                    packAddr = (uint8_t)strtol(addrStr + 2, NULL, 16);
+                } else if (addrStr) {
+                    packAddr = (uint8_t)atoi(addrStr);
+                }
+                if (packAddr >= 1 && packAddr <= MAX_BATTERIES) {
+                    Logger.setPackLogging(packAddr - 1, on);
+                }
+            } else {
+                Logger.setBankLogging(on);
+            }
+        }
+        request->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
+    // List CSV log files on SD card
+    _server->on("/api/logs", HTTP_GET, [](AsyncWebServerRequest *request){
+        DynamicJsonDocument doc(4096);
+        JsonArray files = doc.createNestedArray("files");
+        doc["card_available"] = Logger.isAvailable();
+
+        if (Logger.isAvailable()) {
+            File root = SD_MMC.open("/");
+            if (root && root.isDirectory()) {
+                File file = root.openNextFile();
+                while (file) {
+                    String name = String(file.name());
+                    if (!file.isDirectory() && name.endsWith(".csv")) {
+                        JsonObject fo = files.createNestedObject();
+                        // Strip leading slash if present
+                        if (name.startsWith("/")) name = name.substring(1);
+                        fo["name"] = name;
+                        fo["size"] = file.size();
+                    }
+                    file = root.openNextFile();
+                }
+            }
+        }
+
+        String res;
+        serializeJson(doc, res);
+        request->send(200, "application/json", res);
+    });
+
+    // Download log file directly from SD card: /download?file=bms_bank_log.csv
+    _server->on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
+        if (!Logger.isAvailable()) {
+            request->send(404, "text/plain", "SD Card not available");
+            return;
+        }
+        if (!request->hasParam("file")) {
+            request->send(400, "text/plain", "Missing file parameter");
+            return;
+        }
+        String filename = request->getParam("file")->value();
+        if (!filename.startsWith("/")) {
+            filename = "/" + filename;
+        }
+        if (!SD_MMC.exists(filename)) {
+            request->send(404, "text/plain", "File not found: " + filename);
+            return;
+        }
+        request->send(SD_MMC, filename, "text/csv", true /* download as attachment */);
     });
 }
 

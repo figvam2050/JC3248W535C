@@ -18,10 +18,12 @@ public:
     // Toggle All (Bank overview)
     bool toggleBankLog();
     bool isBankLogging() const { return _bankLogging; }
+    void setBankLogging(bool enable);
 
     // Toggle specific Pack (packIdx: 0..15)
     bool togglePackLog(uint8_t packIdx);
     bool isPackLogging(uint8_t packIdx) const;
+    void setPackLogging(uint8_t packIdx, bool enable);
 
     // Periodic worker
     void update(const BatteryPack* packs, size_t count);

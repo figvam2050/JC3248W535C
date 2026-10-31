@@ -27,5 +27,9 @@ env/
 # Large SD Card dump (music, videos, full assets >280MB)
 sd_backup/
 
+# Logs directory (recorded from device or web sessions)
+logs/
+*.csv
+
 # Backup binaries (uncomment if you don't want to track 16MB firmware binary in git)
 # backup/*.bin

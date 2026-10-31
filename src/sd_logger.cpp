@@ -30,6 +30,12 @@ bool SdLogger::toggleBankLog() {
     return _bankLogging;
 }
 
+void SdLogger::setBankLogging(bool enable) {
+    if (_bankLogging != enable) {
+        toggleBankLog();
+    }
+}
+
 bool SdLogger::togglePackLog(uint8_t packIdx) {
     if (!_cardAvailable || packIdx >= MAX_BATTERIES) return false;
     _packLogging[packIdx] = !_packLogging[packIdx];
@@ -51,6 +57,13 @@ bool SdLogger::togglePackLog(uint8_t packIdx) {
 bool SdLogger::isPackLogging(uint8_t packIdx) const {
     if (packIdx >= MAX_BATTERIES) return false;
     return _packLogging[packIdx];
+}
+
+void SdLogger::setPackLogging(uint8_t packIdx, bool enable) {
+    if (packIdx >= MAX_BATTERIES) return;
+    if (_packLogging[packIdx] != enable) {
+        togglePackLog(packIdx);
+    }
 }
 
 uint32_t SdLogger::getPackRows(uint8_t packIdx) const {
