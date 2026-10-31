@@ -1,5 +1,4 @@
 import gzip
-import re
 
 with open('web_clean.html', 'r', encoding='utf-8') as f:
     html = f.read()
@@ -57,19 +56,11 @@ new_pack_log_card = '''    <div class="card">
 assert old_pack_log_card in html, "old_pack_log_card not found in web_clean.html"
 html = html.replace(old_pack_log_card, new_pack_log_card)
 
-# 3. Оновлення коду в tick(): безпечні перевірки DOM + виклик таблиці SD
-old_lf = '''    const lf = document.getElementById('logfiles');
-    if (lf) {
-      const files = d.log_files || {};
-      const keys = Object.keys(files).sort();
-      lf.innerHTML = keys.length ? keys.map(k => {
-        const f = files[k];
-        const state = f.on ? '<span class="pill ok">запис</span>' : '<span class="pill">стоп</span>';
-        return `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(f.path || '—')}</td><td>${f.rows || 0} · ${escapeHtml(f.last_ts || '—')}</td><td>${state}</td><td style="color:var(--dim);font-size:12px">A ${f.alarm_rows || 0} / W ${f.work_rows || 0}</td></tr>`;
-      }).join('') : '<tr><td>—</td><td>лог ще не створювався</td><td>—</td><td>—</td><td>—</td></tr>';
-    }'''
+# 3. Вбудовування запису прямо всередину tick() перед renderTabs()
+target_inside_tick = '''    renderTabs();
+    renderView();'''
 
-new_lf = '''    const sdEl = document.getElementById('sd_status');
+replacement_inside_tick = '''    const sdEl = document.getElementById('sd_status');
     if (sdEl) {
       sdEl.innerHTML = d.sd_card ? '<span class="pill ok">Вставлена (Ready)</span>' : '<span class="pill bad">Відсутня</span>';
     }
@@ -78,17 +69,51 @@ new_lf = '''    const sdEl = document.getElementById('sd_status');
     const lr = document.getElementById('logrows');
     if (lr) lr.textContent = d.log_rows || 0;
 
-    renderSdFilesTable();'''
+    renderSdFilesTable();
 
-assert old_lf in html, "old_lf not found in web_clean.html"
-html = html.replace(old_lf, new_lf)
+    // Прямий запис рядків у пам'ять браузера на кожному такті
+    if (isWebBankRecording && d.summary) {
+      const s = d.summary;
+      const nowIso = new Date().toISOString();
+      const row = `${nowIso},${s.avg_voltage},${s.total_current},${s.total_power_kw},${s.avg_soc},${s.online_packs},${s.cell_delta_mv},${s.min_cell_mv},${s.max_cell_mv}`;
+      webBankRows.push(row);
+      const btn = document.getElementById('web_rec_btn');
+      if (btn) btn.textContent = `⏹ Зупинити та зберегти CSV (${webBankRows.length - 1})`;
+    }
 
-# 4. Заміна старого коду запису на перевірений повнофункціональний логер
-extra_code = '''
+    if (isWebPackRecording && recordingPackAddr && d.packs) {
+      const p = d.packs[recordingPackAddr];
+      if (p && p.parsed) {
+        const pd = p.parsed;
+        const nowIso = new Date().toISOString();
+        const cellsStr = (pd.cells || []).join(';');
+        const alarmsStr = `${pd.warning}|${pd.protection}|${pd.error_code}`;
+        const pW = (pd.voltage * (pd.current || 0.0)).toFixed(1);
+        const row = `${nowIso},${recordingPackAddr},${pd.voltage},${pd.current},${pW},${pd.soc},${pd.cell_min},${pd.cell_max},${pd.cell_diff},${pd.temp_pcb},${pd.temp_avg},${pd.temp_max},"${alarmsStr}","${cellsStr}"`;
+        webPackRows.push(row);
+        const pBtn = document.getElementById('p_web_rec_btn');
+        if (pBtn) pBtn.textContent = `⏹ Зупинити та зберегти ${recordingPackAddr} (${webPackRows.length - 1})`;
+      }
+    }
+
+    renderTabs();
+    renderView();'''
+
+assert target_inside_tick in html, "target_inside_tick not found in web_clean.html"
+html = html.replace(target_inside_tick, replacement_inside_tick)
+
+# 4. Додавання функцій керування та завантаження
+extra_js = '''
 // ==========================================
 // MicroSD & Browser Robust Logging Engine
 // ==========================================
 window.sdFilesList = [];
+let isWebBankRecording = false;
+let webBankRows = [];
+
+let isWebPackRecording = false;
+let webPackRows = [];
+let recordingPackAddr = null;
 
 async function refreshSdFiles() {
   try {
@@ -156,7 +181,6 @@ async function analyzeSdFile(filename) {
   }
 }
 
-// Download helper function that guarantees file download
 function downloadCsv(filename, rowsArray) {
   const csvContent = rowsArray.join('\\r\\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -172,10 +196,6 @@ function downloadCsv(filename, rowsArray) {
     URL.revokeObjectURL(url);
   }, 200);
 }
-
-// --- Browser Bank Log Recorder ---
-let isWebBankRecording = false;
-let webBankRows = [];
 
 function toggleWebBankRecord() {
   const btn = document.getElementById('web_rec_btn');
@@ -205,16 +225,11 @@ function toggleWebBankRecord() {
   }
 }
 
-// --- Browser Individual Pack Log Recorder ---
-let isWebPackRecording = false;
-let webPackRows = [];
-let recordingPackAddr = null;
-
 function toggleWebPackRecord() {
   const btn = document.getElementById('p_web_rec_btn');
   if (!isWebPackRecording) {
     if (!currentPackAddr) {
-      alert('Оберіть конкретну вкладку АКБ перед стартом запису!');
+      alert('Оберіть вкладку АКБ перед стартом запису!');
       return;
     }
     isWebPackRecording = true;
@@ -244,49 +259,11 @@ function toggleWebPackRecord() {
   }
 }
 
-// Hook into tick() to record data seamlessly on each second
-const baseTick = tick;
-tick = async function() {
-  await baseTick();
-  if (!latestData) return;
-
-  // 1. Bank browser logging
-  if (isWebBankRecording && latestData.summary) {
-    const s = latestData.summary;
-    const nowIso = new Date().toISOString();
-    const row = `${nowIso},${s.avg_voltage},${s.total_current},${s.total_power_kw},${s.avg_soc},${s.online_packs},${s.cell_delta_mv},${s.min_cell_mv},${s.max_cell_mv}`;
-    webBankRows.push(row);
-    const btn = document.getElementById('web_rec_btn');
-    if (btn) {
-      btn.textContent = `⏹ Зупинити та зберегти CSV (${webBankRows.length - 1})`;
-    }
-  }
-
-  // 2. Individual pack browser logging
-  if (isWebPackRecording && recordingPackAddr && latestData.packs) {
-    const p = latestData.packs[recordingPackAddr];
-    if (p && p.parsed) {
-      const d = p.parsed;
-      const nowIso = new Date().toISOString();
-      const cellsStr = (d.cells || []).join(';');
-      const alarmsStr = `${d.warning}|${d.protection}|${d.error_code}`;
-      const pW = (d.voltage * (d.current || 0.0)).toFixed(1);
-      const row = `${nowIso},${recordingPackAddr},${d.voltage},${d.current},${pW},${d.soc},${d.cell_min},${d.cell_max},${d.cell_diff},${d.temp_pcb},${d.temp_avg},${d.temp_max},"${alarmsStr}","${cellsStr}"`;
-      webPackRows.push(row);
-      const pBtn = document.getElementById('p_web_rec_btn');
-      if (pBtn) {
-        pBtn.textContent = `⏹ Зупинити та зберегти ${recordingPackAddr} (${webPackRows.length - 1})`;
-      }
-    }
-  }
-};
-
 setTimeout(refreshSdFiles, 1000);
 setInterval(refreshSdFiles, 8000);
 '''
 
-# Заміна перед </script>
-html = html.replace('initLogViewer();\n</script>', 'initLogViewer();\n' + extra_code + '\n</script>')
+html = html.replace('initLogViewer();\n</script>', 'initLogViewer();\n' + extra_js + '\n</script>')
 
 with open('web_extracted.html', 'w', encoding='utf-8') as f:
     f.write(html)
@@ -296,7 +273,7 @@ gz_bytes = gzip.compress(raw_bytes, 9)
 
 with open('src/index_html_gz.h', 'w') as f:
     f.write('#ifndef INDEX_HTML_GZ_H\n#define INDEX_HTML_GZ_H\n\n')
-    f.write(f'// Exact COMBOX Dashboard HTML with Verified Bank & Pack Loggers ({len(raw_bytes)} bytes -> {len(gz_bytes)} bytes)\n')
+    f.write(f'// Exact COMBOX Dashboard HTML with Guaranteed Direct Tick Recorder ({len(raw_bytes)} bytes -> {len(gz_bytes)} bytes)\n')
     f.write(f'const uint32_t INDEX_HTML_GZ_LEN = {len(gz_bytes)};\n')
     f.write('const uint8_t INDEX_HTML_GZ[] PROGMEM = {\n')
     for i in range(0, len(gz_bytes), 16):
