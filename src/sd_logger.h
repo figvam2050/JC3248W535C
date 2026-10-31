@@ -25,6 +25,19 @@ public:
     bool isPackLogging(uint8_t packIdx) const;
     void setPackLogging(uint8_t packIdx, bool enable);
 
+    // Auto Alarm Logging
+    bool isAutoAlarmLogging() const { return _alarmLogging; }
+    uint32_t getAlarmRows() const { return _alarmRows; }
+
+    // File Management
+    struct FileInfo {
+        char name[32];
+        size_t size;
+    };
+    int getFilesList(FileInfo* outList, int maxFiles);
+    bool deleteFile(const char* filename);
+    bool deleteAllLogs();
+
     // Periodic worker
     void update(const BatteryPack* packs, size_t count);
 
@@ -35,6 +48,9 @@ private:
     bool _cardAvailable = false;
     bool _bankLogging = false;
     uint32_t _bankRows = 0;
+
+    bool _alarmLogging = false;
+    uint32_t _alarmRows = 0;
 
     bool _packLogging[MAX_BATTERIES] = {false};
     uint32_t _packRows[MAX_BATTERIES] = {0};

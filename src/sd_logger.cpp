@@ -71,6 +71,54 @@ uint32_t SdLogger::getPackRows(uint8_t packIdx) const {
     return _packRows[packIdx];
 }
 
+int SdLogger::getFilesList(FileInfo* outList, int maxFiles) {
+    if (!_cardAvailable || !outList || maxFiles <= 0) return 0;
+    int count = 0;
+    File root = SD_MMC.open("/");
+    if (!root || !root.isDirectory()) return 0;
+
+    File file = root.openNextFile();
+    while (file && count < maxFiles) {
+        String name = String(file.name());
+        if (!file.isDirectory() && name.endsWith(".csv")) {
+            if (name.startsWith("/")) name = name.substring(1);
+            strncpy(outList[count].name, name.c_str(), sizeof(outList[count].name) - 1);
+            outList[count].name[sizeof(outList[count].name) - 1] = '\0';
+            outList[count].size = file.size();
+            count++;
+        }
+        file = root.openNextFile();
+    }
+    return count;
+}
+
+bool SdLogger::deleteFile(const char* filename) {
+    if (!_cardAvailable || !filename) return false;
+    String path = filename;
+    if (!path.startsWith("/")) path = "/" + path;
+    if (SD_MMC.exists(path)) {
+        return SD_MMC.remove(path);
+    }
+    return false;
+}
+
+bool SdLogger::deleteAllLogs() {
+    if (!_cardAvailable) return false;
+    File root = SD_MMC.open("/");
+    if (!root || !root.isDirectory()) return false;
+
+    File file = root.openNextFile();
+    while (file) {
+        String name = String(file.name());
+        if (!file.isDirectory() && name.endsWith(".csv")) {
+            if (!name.startsWith("/")) name = "/" + name;
+            SD_MMC.remove(name);
+        }
+        file = root.openNextFile();
+    }
+    return true;
+}
+
 void SdLogger::update(const BatteryPack* packs, size_t count) {
     if (!_cardAvailable) return;
 
@@ -79,6 +127,52 @@ void SdLogger::update(const BatteryPack* packs, size_t count) {
     _lastLogMs = millis();
 
     uint32_t nowMs = millis();
+
+    // Check for any active alarms across all packs
+    bool anyAlarm = false;
+    for (size_t i = 0; i < count; i++) {
+        if (packs[i].isOnline && (packs[i].warningRaw || packs[i].protectionRaw || packs[i].errorRaw)) {
+            anyAlarm = true;
+            break;
+        }
+    }
+    _alarmLogging = anyAlarm;
+
+    // A. Auto Alarm Log (Blackbox)
+    if (_alarmLogging) {
+        if (!SD_MMC.exists("/bms_alarm_log.csv")) {
+            File f = SD_MMC.open("/bms_alarm_log.csv", FILE_WRITE);
+            if (f) {
+                f.println("Timestamp_ms,Pack,Voltage_V,Current_A,SOC,Warning_Raw,Protection_Raw,Error_Raw,Cell_Min_mV,Cell_Max_mV,Delta_mV,Temp_PCB,Temp_Avg,Temp_Max");
+                f.close();
+            }
+        }
+        File f = SD_MMC.open("/bms_alarm_log.csv", FILE_APPEND);
+        if (f) {
+            for (size_t i = 0; i < count; i++) {
+                if (packs[i].isOnline && (packs[i].warningRaw || packs[i].protectionRaw || packs[i].errorRaw)) {
+                    f.printf("%u,%u,%.2f,%.1f,%.0f,0x%04X,0x%04X,0x%04X,%u,%u,%u,%d,%d,%d\n",
+                        nowMs,
+                        (unsigned int)(i + 1),
+                        packs[i].voltage,
+                        packs[i].current,
+                        packs[i].soc,
+                        packs[i].warningRaw,
+                        packs[i].protectionRaw,
+                        packs[i].errorRaw,
+                        packs[i].cellMin,
+                        packs[i].cellMax,
+                        packs[i].cellDiff,
+                        packs[i].tempPcb,
+                        packs[i].tempAvg,
+                        packs[i].tempMax
+                    );
+                    _alarmRows++;
+                }
+            }
+            f.close();
+        }
+    }
 
     // 1. Bank Log
     if (_bankLogging) {

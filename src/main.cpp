@@ -92,6 +92,12 @@ static lv_obj_t *btn_bank_log = NULL;
 static lv_obj_t *lbl_bank_log = NULL;
 static lv_obj_t *lbl_top_ip = NULL;
 
+// Dedicated Logs Tab Widgets
+static lv_obj_t *tab_logs = NULL;
+static lv_obj_t *lbl_logs_status = NULL;
+static lv_obj_t *logs_list_container = NULL;
+static void refresh_logs_ui();
+
 struct PackUI {
     lv_obj_t *tab;
     lv_obj_t *lbl_status;
@@ -185,6 +191,27 @@ static void btn_pack_log_cb(lv_event_t * e) {
     }
 }
 
+// Logs UI Events
+static void btn_refresh_logs_cb(lv_event_t * e) {
+    BmsAudio.playClick();
+    refresh_logs_ui();
+}
+
+static void btn_clear_all_logs_cb(lv_event_t * e) {
+    BmsAudio.playClick();
+    Logger.deleteAllLogs();
+    refresh_logs_ui();
+}
+
+static void btn_delete_single_file_cb(lv_event_t * e) {
+    const char* filename = (const char*)lv_event_get_user_data(e);
+    if (filename) {
+        BmsAudio.playClick();
+        Logger.deleteFile(filename);
+        refresh_logs_ui();
+    }
+}
+
 // Touch Reading
 static bool touch_read_hw(uint16_t &x, uint16_t &y) {
     uint8_t data[AXS_MAX_TOUCH * 6 + 2] = {0};
@@ -265,7 +292,7 @@ static lv_obj_t* create_glass_card(lv_obj_t *parent, int w, int h) {
 
 static void create_battery_tab(uint8_t pack_idx) {
     char tab_name[16];
-    snprintf(tab_name, sizeof(tab_name), "Pack #%u", pack_idx + 1);
+    snprintf(tab_name, sizeof(tab_name), "P%u", pack_idx + 1);
     
     lv_obj_t *tab = lv_tabview_add_tab(tabview, tab_name);
     lv_obj_set_style_bg_color(tab, lv_color_hex(CLR_DARK_BG), 0);
@@ -403,10 +430,140 @@ static void create_battery_tab(uint8_t pack_idx) {
     ui.created = true;
 }
 
+static void refresh_logs_ui() {
+    if (!logs_list_container) return;
+    lv_obj_clean(logs_list_container);
+
+    if (!Logger.isAvailable()) {
+        lv_label_set_text(lbl_logs_status, "MicroSD Card: NOT DETECTED");
+        lv_obj_set_style_text_color(lbl_logs_status, lv_color_hex(CLR_ROSE), 0);
+        return;
+    }
+
+    lv_label_set_text(lbl_logs_status, "MicroSD Card: READY");
+    lv_obj_set_style_text_color(lbl_logs_status, lv_color_hex(CLR_EMERALD), 0);
+
+    SdLogger::FileInfo fileList[16];
+    int count = Logger.getFilesList(fileList, 16);
+
+    if (count == 0) {
+        lv_obj_t *lbl_empty = lv_label_create(logs_list_container);
+        lv_label_set_text(lbl_empty, "No CSV log files on MicroSD");
+        lv_obj_set_style_text_color(lbl_empty, lv_color_hex(CLR_TEXT_MUTED), 0);
+        lv_obj_set_style_text_font(lbl_empty, &lv_font_montserrat_12, 0);
+        lv_obj_align(lbl_empty, LV_ALIGN_CENTER, 0, 30);
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        lv_obj_t *row = lv_obj_create(logs_list_container);
+        lv_obj_set_size(row, 296, 42);
+        lv_obj_set_style_bg_color(row, lv_color_hex(CLR_PANEL_INNER), 0);
+        lv_obj_set_style_border_color(row, lv_color_hex(CLR_BORDER), 0);
+        lv_obj_set_style_border_width(row, 1, 0);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_pad_all(row, 4, 0);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t *lbl_name = lv_label_create(row);
+        lv_label_set_text(lbl_name, fileList[i].name);
+        lv_obj_set_style_text_color(lbl_name, lv_color_hex(CLR_CYAN), 0);
+        lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_12, 0);
+        lv_obj_align(lbl_name, LV_ALIGN_TOP_LEFT, 4, 2);
+
+        lv_obj_t *lbl_sz = lv_label_create(row);
+        char szBuf[24];
+        snprintf(szBuf, sizeof(szBuf), "%.1f KB", fileList[i].size / 1024.0f);
+        lv_label_set_text(lbl_sz, szBuf);
+        lv_obj_set_style_text_color(lbl_sz, lv_color_hex(CLR_TEXT_MUTED), 0);
+        lv_obj_set_style_text_font(lbl_sz, &lv_font_montserrat_10, 0);
+        lv_obj_align(lbl_sz, LV_ALIGN_BOTTOM_LEFT, 4, -2);
+
+        // DEL Button
+        lv_obj_t *btn_del = lv_btn_create(row);
+        lv_obj_set_size(btn_del, 64, 28);
+        lv_obj_align(btn_del, LV_ALIGN_RIGHT_MID, -2, 0);
+        lv_obj_set_style_bg_color(btn_del, lv_color_hex(CLR_ROSE), 0);
+        lv_obj_set_style_radius(btn_del, 6, 0);
+        
+        // Allocate heap copy of filename string for event callback
+        char* heapName = strdup(fileList[i].name);
+        lv_obj_add_event_cb(btn_del, btn_delete_single_file_cb, LV_EVENT_CLICKED, heapName);
+
+        lv_obj_t *lbl_del = lv_label_create(btn_del);
+        lv_label_set_text(lbl_del, "DEL");
+        lv_obj_set_style_text_color(lbl_del, lv_color_white(), 0);
+        lv_obj_set_style_text_font(lbl_del, &lv_font_montserrat_12, 0);
+        lv_obj_align(lbl_del, LV_ALIGN_CENTER, 0, 0);
+    }
+}
+
+static void create_logs_tab() {
+    tab_logs = lv_tabview_add_tab(tabview, "Logs");
+    lv_obj_set_style_bg_color(tab_logs, lv_color_hex(CLR_DARK_BG), 0);
+    lv_obj_set_style_pad_all(tab_logs, 6, 0);
+
+    // Top Header & Controls Card
+    lv_obj_t *top_card = create_glass_card(tab_logs, 308, 64);
+    lv_obj_align(top_card, LV_ALIGN_TOP_MID, 0, 0);
+
+    lbl_logs_status = lv_label_create(top_card);
+    lv_label_set_text(lbl_logs_status, "MicroSD Storage Manager");
+    lv_obj_set_style_text_color(lbl_logs_status, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_logs_status, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_logs_status, LV_ALIGN_TOP_LEFT, 2, 0);
+
+    // Refresh Button
+    lv_obj_t *btn_ref = lv_btn_create(top_card);
+    lv_obj_set_size(btn_ref, 80, 26);
+    lv_obj_align(btn_ref, LV_ALIGN_BOTTOM_LEFT, 2, 0);
+    lv_obj_set_style_bg_color(btn_ref, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_ref, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(btn_ref, 1, 0);
+    lv_obj_set_style_radius(btn_ref, 6, 0);
+    lv_obj_add_event_cb(btn_ref, btn_refresh_logs_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_ref = lv_label_create(btn_ref);
+    lv_label_set_text(lbl_ref, "REFRESH");
+    lv_obj_set_style_text_color(lbl_ref, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_ref, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_ref, LV_ALIGN_CENTER, 0, 0);
+
+    // Clear All Button
+    lv_obj_t *btn_clr = lv_btn_create(top_card);
+    lv_obj_set_size(btn_clr, 96, 26);
+    lv_obj_align(btn_clr, LV_ALIGN_BOTTOM_RIGHT, -2, 0);
+    lv_obj_set_style_bg_color(btn_clr, lv_color_hex(0x4C0519), 0);
+    lv_obj_set_style_border_color(btn_clr, lv_color_hex(CLR_ROSE), 0);
+    lv_obj_set_style_border_width(btn_clr, 1, 0);
+    lv_obj_set_style_radius(btn_clr, 6, 0);
+    lv_obj_add_event_cb(btn_clr, btn_clear_all_logs_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_clr = lv_label_create(btn_clr);
+    lv_label_set_text(lbl_clr, "CLEAR ALL");
+    lv_obj_set_style_text_color(lbl_clr, lv_color_hex(CLR_ROSE), 0);
+    lv_obj_set_style_text_font(lbl_clr, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_clr, LV_ALIGN_CENTER, 0, 0);
+
+    // Files List Scrollable Container
+    logs_list_container = lv_obj_create(tab_logs);
+    lv_obj_set_size(logs_list_container, 308, 350);
+    lv_obj_align(logs_list_container, LV_ALIGN_TOP_MID, 0, 72);
+    lv_obj_set_style_bg_color(logs_list_container, lv_color_hex(CLR_PANEL), 0);
+    lv_obj_set_style_border_color(logs_list_container, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(logs_list_container, 1, 0);
+    lv_obj_set_style_radius(logs_list_container, 12, 0);
+    lv_obj_set_style_pad_all(logs_list_container, 6, 0);
+    lv_obj_set_flex_flow(logs_list_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(logs_list_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    refresh_logs_ui();
+}
+
 static void build_ui() {
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(CLR_DARK_BG), 0);
 
-    tabview = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 40);
+    tabview = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 34);
     lv_obj_set_style_bg_color(tabview, lv_color_hex(CLR_DARK_BG), 0);
     
     lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview);
@@ -416,9 +573,9 @@ static void build_ui() {
     lv_obj_set_style_text_color(tab_btns, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_color(tab_btns, lv_color_hex(CLR_CYAN), LV_PART_ITEMS | LV_STATE_CHECKED);
     lv_obj_set_style_border_color(tab_btns, lv_color_hex(CLR_CYAN), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_12, 0);
 
-    tab_overview = lv_tabview_add_tab(tabview, "Overview");
+    tab_overview = lv_tabview_add_tab(tabview, "All");
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_overview, 6, 0);
 
@@ -584,6 +741,9 @@ static void build_ui() {
     lv_obj_set_style_text_color(bus_tag, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(bus_tag, &lv_font_montserrat_10, 0);
     lv_obj_align(bus_tag, LV_ALIGN_BOTTOM_MID, 0, -2);
+
+    // Create Dedicated Logs Tab
+    create_logs_tab();
 }
 
 static void update_ui() {
@@ -600,7 +760,12 @@ static void update_ui() {
     Logger.update(local_packs, MAX_BATTERIES);
 
     // Update Overview button status if logging
-    if (Logger.isBankLogging()) {
+    if (Logger.isAutoAlarmLogging()) {
+        char recTxt[48];
+        snprintf(recTxt, sizeof(recTxt), "● AUTO ALARM REC: %u", Logger.getAlarmRows());
+        lv_label_set_text(lbl_bank_log, recTxt);
+        lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_ROSE), 0);
+    } else if (Logger.isBankLogging()) {
         char recTxt[48];
         snprintf(recTxt, sizeof(recTxt), "● REC BANK: %u ROWS", Logger.getBankRows());
         lv_label_set_text(lbl_bank_log, recTxt);
