@@ -223,6 +223,10 @@ void WebGateway::setupRoutes() {
                     p["online"] = true;
                     p["err"] = "";
                     p["log_on"] = Logger.isPackLogging(i);
+                    char pPath[32];
+                    snprintf(pPath, sizeof(pPath), "/pack_%02u_log.csv", i + 1);
+                    p["log_path"] = pPath;
+                    p["log_rows"] = Logger.getPackRows(i);
 
                     JsonObject parsed = p.createNestedObject("parsed");
                     parsed["voltage"] = _packs[i].voltage;
