@@ -27,7 +27,7 @@
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 480
 
-// Premium Color Palette (Tesla / SolarEdge Dark UI)
+// Premium Color Palette
 #define CLR_DARK_BG       0x080B10  // Pitch black OLED style
 #define CLR_PANEL         0x121721  // Subtle blue-slate card
 #define CLR_PANEL_INNER   0x0D1219  // Inset recessed background
@@ -73,6 +73,12 @@ static lv_obj_t *lbl_delta_val = NULL;
 static lv_obj_t *bar_delta = NULL;
 static lv_obj_t *lbl_delta_extremes = NULL;
 
+// Dedicated Alarm Banner Widget on Overview
+static lv_obj_t *card_alarm_banner = NULL;
+static lv_obj_t *lbl_alarm_icon = NULL;
+static lv_obj_t *lbl_alarm_title = NULL;
+static lv_obj_t *lbl_alarm_details = NULL;
+
 static lv_obj_t *lbl_autonomy_str = NULL;
 static lv_obj_t *lbl_packs_online = NULL;
 static lv_obj_t *lbl_top_ip = NULL;
@@ -88,6 +94,8 @@ struct PackUI {
     lv_obj_t *lbl_soc;
     lv_obj_t *lbl_temps;
     lv_obj_t *lbl_delta;
+    lv_obj_t *card_alarm;
+    lv_obj_t *lbl_alarm_text;
     lv_obj_t *chart_cells;
     lv_chart_series_t *ser_cells;
     lv_obj_t *lbl_cells[CELLS_PER_BATTERY];
@@ -95,6 +103,47 @@ struct PackUI {
     bool created;
 };
 static PackUI g_pack_ui[MAX_BATTERIES];
+
+// Helper: Decode Alarm bits into human readable text
+static String decodeAlarmString(const BatteryPack &p) {
+    String res = "";
+    uint16_t w = p.warningRaw;
+    uint16_t pr = p.protectionRaw;
+    uint16_t err = p.errorRaw;
+
+    if (pr & 0x0001) res += "Pack OV Prot | ";
+    else if (w & 0x0001) res += "Pack OV Warn | ";
+
+    if (pr & 0x0002) res += "Cell OV Prot | ";
+    else if (w & 0x0002) res += "Cell OV Warn | ";
+
+    if (pr & 0x0004) res += "Pack UV Prot | ";
+    else if (w & 0x0004) res += "Pack UV Warn | ";
+
+    if (pr & 0x0008) res += "Cell UV Prot | ";
+    else if (w & 0x0008) res += "Cell UV Warn | ";
+
+    if (pr & 0x0010) res += "Charge OC Prot | ";
+    else if (w & 0x0010) res += "Charge OC Warn | ";
+
+    if (pr & 0x0020) res += "Discharge OC Prot | ";
+    else if (w & 0x0020) res += "Discharge OC Warn | ";
+
+    if (w & 0x0040) res += "Temp Anomaly | ";
+    if (w & 0x0080) res += "MOS OverTemp | ";
+    if (w & 0x0100) res += "Charge OverTemp | ";
+    if (w & 0x0200) res += "Discharge OverTemp | ";
+    if (w & 0x0400) res += "Charge UnderTemp | ";
+
+    if (err & 0x0001) res += "Voltage Error | ";
+    if (err & 0x0002) res += "Temp Error | ";
+    if (err & 0x0010) res += "Cell Unbalance | ";
+
+    if (res.length() > 3) {
+        res.remove(res.length() - 3); // Remove trailing " | "
+    }
+    return res;
+}
 
 // --- Touch Reading ---
 static bool touch_read_hw(uint16_t &x, uint16_t &y) {
@@ -150,7 +199,7 @@ static void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data
     }
 }
 
-// --- Helper: Modern Rounded Glass Card ---
+// --- Helper: Modern Glass Card ---
 static lv_obj_t* create_glass_card(lv_obj_t *parent, int w, int h) {
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_size(card, w, h);
@@ -177,7 +226,7 @@ static void create_battery_tab(uint8_t pack_idx) {
     ui.tab = tab;
 
     // 1. Pack Header Card
-    lv_obj_t *top_card = create_glass_card(tab, 308, 92);
+    lv_obj_t *top_card = create_glass_card(tab, 308, 88);
     lv_obj_align(top_card, LV_ALIGN_TOP_MID, 0, 0);
 
     ui.lbl_status = lv_label_create(top_card);
@@ -210,7 +259,6 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_text_font(ui.lbl_power, &lv_font_montserrat_14, 0);
     lv_obj_align(ui.lbl_power, LV_ALIGN_RIGHT_MID, -2, -6);
 
-    // Slim SoC bar
     ui.bar_soc = lv_bar_create(top_card);
     lv_obj_set_size(ui.bar_soc, 240, 10);
     lv_obj_align(ui.bar_soc, LV_ALIGN_BOTTOM_LEFT, 2, -2);
@@ -226,25 +274,30 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_text_font(ui.lbl_soc, &lv_font_montserrat_12, 0);
     lv_obj_align(ui.lbl_soc, LV_ALIGN_BOTTOM_RIGHT, -2, -2);
 
-    // 2. Temperatures Banner
-    ui.lbl_temps = lv_label_create(tab);
-    lv_label_set_text(ui.lbl_temps, "PCB: 25C  |  Avg: 24C  |  Max: 25C");
+    // 2. Alarm & Protection Banner for this pack
+    ui.card_alarm = create_glass_card(tab, 308, 38);
+    lv_obj_align(ui.card_alarm, LV_ALIGN_TOP_MID, 0, 92);
+    lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_pad_all(ui.card_alarm, 4, 0);
+
+    ui.lbl_alarm_text = lv_label_create(ui.card_alarm);
+    lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
+    lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(ui.lbl_alarm_text, &lv_font_montserrat_12, 0);
+    lv_obj_align(ui.lbl_alarm_text, LV_ALIGN_CENTER, 0, 0);
+
+    // 3. 15S Cell Bar Chart
+    lv_obj_t *chart_card = create_glass_card(tab, 308, 92);
+    lv_obj_align(chart_card, LV_ALIGN_TOP_MID, 0, 134);
+
+    ui.lbl_temps = lv_label_create(chart_card);
+    lv_label_set_text(ui.lbl_temps, "PCB: 25C | Avg: 24C | Max: 25C");
     lv_obj_set_style_text_color(ui.lbl_temps, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(ui.lbl_temps, &lv_font_montserrat_12, 0);
-    lv_obj_align(ui.lbl_temps, LV_ALIGN_TOP_MID, 0, 98);
-
-    // 3. 15S Cell Bar Chart (Graphical Profile)
-    lv_obj_t *chart_card = create_glass_card(tab, 308, 100);
-    lv_obj_align(chart_card, LV_ALIGN_TOP_MID, 0, 120);
-
-    lv_obj_t *chart_title = lv_label_create(chart_card);
-    lv_label_set_text(chart_title, "15S CELL VOLTAGE PROFILE");
-    lv_obj_set_style_text_color(chart_title, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(chart_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(chart_title, LV_ALIGN_TOP_LEFT, 2, -2);
+    lv_obj_set_style_text_font(ui.lbl_temps, &lv_font_montserrat_10, 0);
+    lv_obj_align(ui.lbl_temps, LV_ALIGN_TOP_LEFT, 2, -2);
 
     ui.chart_cells = lv_chart_create(chart_card);
-    lv_obj_set_size(ui.chart_cells, 292, 68);
+    lv_obj_set_size(ui.chart_cells, 292, 60);
     lv_obj_align(ui.chart_cells, LV_ALIGN_BOTTOM_MID, 0, 2);
     lv_chart_set_type(ui.chart_cells, LV_CHART_TYPE_BAR);
     lv_chart_set_range(ui.chart_cells, LV_CHART_AXIS_PRIMARY_Y, 3000, 3600);
@@ -254,8 +307,8 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_pad_all(ui.chart_cells, 2, 0);
     ui.ser_cells = lv_chart_add_series(ui.chart_cells, lv_color_hex(CLR_CYAN), LV_CHART_AXIS_PRIMARY_Y);
 
-    // 4. Compact 15 Cell Values Matrix (5 rows x 3 columns)
-    int start_y = 228;
+    // 4. 15 Cell Values Matrix (5 rows x 3 columns)
+    int start_y = 230;
     for (int i = 0; i < CELLS_PER_BATTERY; i++) {
         int row = i / 3;
         int col = i % 3;
@@ -324,17 +377,16 @@ static void build_ui() {
     lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -4, 0);
 
     // 2. Central Gauge Card (Circular Arc SoC + Power)
-    lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 175);
-    lv_obj_align(gauge_card, LV_ALIGN_TOP_MID, 0, 44);
+    lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 168);
+    lv_obj_align(gauge_card, LV_ALIGN_TOP_MID, 0, 42);
 
-    // Circular Arc Gauge
     arc_soc = lv_arc_create(gauge_card);
-    lv_obj_set_size(arc_soc, 150, 150);
+    lv_obj_set_size(arc_soc, 146, 146);
     lv_arc_set_rotation(arc_soc, 135);
     lv_arc_set_bg_angles(arc_soc, 0, 270);
     lv_arc_set_range(arc_soc, 0, 100);
     lv_arc_set_value(arc_soc, 75);
-    lv_obj_remove_style(arc_soc, NULL, LV_PART_KNOB); // Hide knob for clean ring
+    lv_obj_remove_style(arc_soc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(arc_soc, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_arc_width(arc_soc, 12, LV_PART_MAIN);
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_PANEL_INNER), LV_PART_MAIN);
@@ -342,7 +394,6 @@ static void build_ui() {
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
     lv_obj_align(arc_soc, LV_ALIGN_LEFT_MID, -2, 0);
 
-    // Values inside the circle
     lbl_soc_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_soc_val, "75%");
     lv_obj_set_style_text_color(lbl_soc_val, lv_color_white(), 0);
@@ -355,59 +406,82 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_soc_sub, &lv_font_montserrat_10, 0);
     lv_obj_align_to(lbl_soc_sub, arc_soc, LV_ALIGN_CENTER, 0, 18);
 
-    // Right side of gauge card: Big Power & Metrics
+    // Right side metrics
     lv_obj_t *lbl_pwr_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_pwr_title, "ACTIVE POWER");
     lv_obj_set_style_text_color(lbl_pwr_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_pwr_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -6, 12);
+    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -6, 10);
 
     lbl_power_kw = lv_label_create(gauge_card);
     lv_label_set_text(lbl_power_kw, "1.55 kW");
     lv_obj_set_style_text_color(lbl_power_kw, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_power_kw, &lv_font_montserrat_24, 0);
-    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -6, 26);
+    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -6, 24);
 
-    // Mini V & I inside right panel
     lv_obj_t *lbl_v_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_v_title, "VOLTAGE");
     lv_obj_set_style_text_color(lbl_v_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_v_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_v_title, LV_ALIGN_RIGHT_MID, -70, 20);
+    lv_obj_align(lbl_v_title, LV_ALIGN_RIGHT_MID, -70, 18);
 
     lbl_voltage_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_voltage_val, "51.72 V");
     lv_obj_set_style_text_color(lbl_voltage_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_voltage_val, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_voltage_val, LV_ALIGN_RIGHT_MID, -70, 36);
+    lv_obj_align(lbl_voltage_val, LV_ALIGN_RIGHT_MID, -70, 34);
 
     lv_obj_t *lbl_i_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_i_title, "CURRENT");
     lv_obj_set_style_text_color(lbl_i_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_i_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_i_title, LV_ALIGN_RIGHT_MID, -6, 20);
+    lv_obj_align(lbl_i_title, LV_ALIGN_RIGHT_MID, -6, 18);
 
     lbl_current_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_current_val, "+29.9 A");
     lv_obj_set_style_text_color(lbl_current_val, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(lbl_current_val, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_current_val, LV_ALIGN_RIGHT_MID, -6, 36);
+    lv_obj_align(lbl_current_val, LV_ALIGN_RIGHT_MID, -6, 34);
 
-    // 3. Bank Health & Delta Card
-    lv_obj_t *health_card = create_glass_card(tab_overview, 308, 98);
-    lv_obj_align(health_card, LV_ALIGN_TOP_MID, 0, 225);
+    // 3. NEW: Dedicated DYNAMIC ALARM BANNER (Prominent on Overview)
+    card_alarm_banner = create_glass_card(tab_overview, 308, 46);
+    lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 214);
+    lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0); // Default serene dark emerald
+    lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_EMERALD), 0);
+
+    lbl_alarm_icon = lv_label_create(card_alarm_banner);
+    lv_label_set_text(lbl_alarm_icon, "●");
+    lv_obj_set_style_text_color(lbl_alarm_icon, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_alarm_icon, &lv_font_montserrat_16, 0);
+    lv_obj_align(lbl_alarm_icon, LV_ALIGN_LEFT_MID, 2, 0);
+
+    lbl_alarm_title = lv_label_create(card_alarm_banner);
+    lv_label_set_text(lbl_alarm_title, "SYSTEM STATUS: ALL OK");
+    lv_obj_set_style_text_color(lbl_alarm_title, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_alarm_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_alarm_title, LV_ALIGN_TOP_LEFT, 20, 0);
+
+    lbl_alarm_details = lv_label_create(card_alarm_banner);
+    lv_label_set_text(lbl_alarm_details, "No active warnings, protections or faults");
+    lv_obj_set_style_text_color(lbl_alarm_details, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_alarm_details, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_alarm_details, LV_ALIGN_BOTTOM_LEFT, 20, 0);
+
+    // 4. Bank Health & Delta Card
+    lv_obj_t *health_card = create_glass_card(tab_overview, 308, 86);
+    lv_obj_align(health_card, LV_ALIGN_TOP_MID, 0, 264);
 
     lv_obj_t *h_title = lv_label_create(health_card);
     lv_label_set_text(h_title, "BANK CELL BALANCE (DELTA)");
     lv_obj_set_style_text_color(h_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(h_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(h_title, LV_ALIGN_TOP_LEFT, 2, 2);
+    lv_obj_align(h_title, LV_ALIGN_TOP_LEFT, 2, 0);
 
     lbl_delta_val = lv_label_create(health_card);
     lv_label_set_text(lbl_delta_val, "50 mV");
     lv_obj_set_style_text_color(lbl_delta_val, lv_color_hex(CLR_AMBER), 0);
-    lv_obj_set_style_text_font(lbl_delta_val, &lv_font_montserrat_20, 0);
-    lv_obj_align(lbl_delta_val, LV_ALIGN_TOP_RIGHT, -2, -2);
+    lv_obj_set_style_text_font(lbl_delta_val, &lv_font_montserrat_18, 0);
+    lv_obj_align(lbl_delta_val, LV_ALIGN_TOP_RIGHT, -2, -4);
 
     bar_delta = lv_bar_create(health_card);
     lv_obj_set_size(bar_delta, 290, 8);
@@ -425,21 +499,21 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_delta_extremes, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_delta_extremes, LV_ALIGN_BOTTOM_LEFT, 2, -2);
 
-    // 4. Autonomy & Packs Status Card
-    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 98);
-    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 329);
+    // 5. Autonomy & Packs Info Card
+    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 80);
+    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 354);
 
     lbl_packs_online = lv_label_create(info_card);
     lv_label_set_text(lbl_packs_online, "Connected: 2 Packs (Demo)");
     lv_obj_set_style_text_color(lbl_packs_online, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_packs_online, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_packs_online, LV_ALIGN_TOP_LEFT, 4, 2);
+    lv_obj_set_style_text_font(lbl_packs_online, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_packs_online, LV_ALIGN_TOP_LEFT, 4, 0);
 
     lbl_autonomy_str = lv_label_create(info_card);
     lv_label_set_text(lbl_autonomy_str, "ETA to 100%: ~1 h 40 m");
     lv_obj_set_style_text_color(lbl_autonomy_str, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_autonomy_str, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_autonomy_str, LV_ALIGN_LEFT_MID, 4, 0);
+    lv_obj_set_style_text_font(lbl_autonomy_str, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_autonomy_str, LV_ALIGN_LEFT_MID, 4, 2);
 
     lv_obj_t *bus_tag = lv_label_create(info_card);
     lv_label_set_text(bus_tag, "BUS: RS485 SNIFFER (GPIO 44 PASSIVE)");
@@ -467,6 +541,8 @@ static void update_ui() {
     uint16_t gMax = 0;
     bool alarms = false;
     bool anyBalancing = false;
+    String firstAlarmPack = "";
+    String firstAlarmDesc = "";
 
     for (int i = 0; i < MAX_BATTERIES; i++) {
         if (local_packs[i].isOnline) {
@@ -476,7 +552,14 @@ static void update_ui() {
             count++;
             if (local_packs[i].cellMin < gMin && local_packs[i].cellMin > 0) gMin = local_packs[i].cellMin;
             if (local_packs[i].cellMax > gMax) gMax = local_packs[i].cellMax;
-            if (local_packs[i].warningRaw || local_packs[i].protectionRaw || local_packs[i].errorRaw) alarms = true;
+            
+            if (local_packs[i].warningRaw || local_packs[i].protectionRaw || local_packs[i].errorRaw) {
+                alarms = true;
+                if (firstAlarmPack == "") {
+                    firstAlarmPack = "Pack #" + String(i + 1);
+                    firstAlarmDesc = decodeAlarmString(local_packs[i]);
+                }
+            }
             if (local_packs[i].balanceMask != 0) anyBalancing = true;
         }
     }
@@ -497,9 +580,9 @@ static void update_ui() {
         lv_label_set_text(lbl_top_ip, "Wi-Fi: ...");
     }
 
-    // Dynamic Status Pill & Theme
+    // Top Mode Banner
     if (alarms) {
-        lv_label_set_text(lbl_mode_pill, "⚠️ ALARM / PROTECTION");
+        lv_label_set_text(lbl_mode_pill, "⚠️ ALARM / PROTECTION DETECTED");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_ROSE), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_ROSE), LV_PART_INDICATOR);
     } else if (anyBalancing) {
@@ -520,7 +603,31 @@ static void update_ui() {
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_CYAN), LV_PART_INDICATOR);
     }
 
-    // Arc & Core Numbers
+    // UPDATE PROMINENT ALARM BANNER ON OVERVIEW
+    if (alarms) {
+        lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x4C0519), 0); // Deep red glowing alert
+        lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_ROSE), 0);
+        lv_label_set_text(lbl_alarm_icon, "⚠️");
+        lv_obj_set_style_text_color(lbl_alarm_icon, lv_color_hex(CLR_ROSE), 0);
+
+        String title = "FAULT: " + firstAlarmPack;
+        lv_label_set_text(lbl_alarm_title, title.c_str());
+        lv_obj_set_style_text_color(lbl_alarm_title, lv_color_hex(CLR_ROSE), 0);
+
+        lv_label_set_text(lbl_alarm_details, firstAlarmDesc.c_str());
+    } else {
+        lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0); // Calm deep emerald
+        lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_EMERALD), 0);
+        lv_label_set_text(lbl_alarm_icon, "●");
+        lv_obj_set_style_text_color(lbl_alarm_icon, lv_color_hex(CLR_EMERALD), 0);
+
+        lv_label_set_text(lbl_alarm_title, "SYSTEM STATUS: ALL OK");
+        lv_obj_set_style_text_color(lbl_alarm_title, lv_color_hex(CLR_EMERALD), 0);
+
+        lv_label_set_text(lbl_alarm_details, "No active warnings, protections or faults");
+    }
+
+    // Core Metrics
     char buf[64];
     snprintf(buf, sizeof(buf), "%.0f%%", avgSoc);
     lv_label_set_text(lbl_soc_val, buf);
@@ -542,7 +649,7 @@ static void update_ui() {
         lv_obj_set_style_text_color(lbl_current_val, lv_color_white(), 0);
     }
 
-    // Delta & Bar
+    // Delta
     snprintf(buf, sizeof(buf), "%u mV", globalDeltaMv);
     lv_label_set_text(lbl_delta_val, buf);
     lv_bar_set_value(bar_delta, globalDeltaMv > 100 ? 100 : globalDeltaMv, LV_ANIM_ON);
@@ -589,22 +696,49 @@ static void update_ui() {
         }
 
         PackUI &ui = g_pack_ui[i];
+        bool pHasAlarm = (p.warningRaw || p.protectionRaw || p.errorRaw);
 
-        if (p.warningRaw || p.protectionRaw || p.errorRaw) {
+        if (pHasAlarm) {
             lv_label_set_text(ui.lbl_status, "ALARM");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_ROSE), 0);
+            
+            String dec = decodeAlarmString(p);
+            lv_label_set_text(ui.lbl_alarm_text, ("⚠️ " + dec).c_str());
+            lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_ROSE), 0);
+            lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(0x4C0519), 0);
+            lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_ROSE), 0);
         } else if (p.balanceMask != 0) {
             lv_label_set_text(ui.lbl_status, "BALANCING");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_AMBER), 0);
+
+            lv_label_set_text(ui.lbl_alarm_text, "Active cell balancing in progress");
+            lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_AMBER), 0);
+            lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(0x2D2415), 0);
+            lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_AMBER), 0);
         } else if (p.current > 0.5f) {
             lv_label_set_text(ui.lbl_status, "CHARGING");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_EMERALD), 0);
+
+            lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
+            lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
+            lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_BORDER), 0);
         } else if (p.current < -0.5f) {
             lv_label_set_text(ui.lbl_status, "DISCHARGING");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_BLUE), 0);
+
+            lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
+            lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
+            lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_BORDER), 0);
         } else {
             lv_label_set_text(ui.lbl_status, "STANDBY");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_TEXT_MUTED), 0);
+
+            lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
+            lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
+            lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_BORDER), 0);
         }
 
         snprintf(buf, sizeof(buf), "%.2f V", p.voltage);
@@ -623,7 +757,7 @@ static void update_ui() {
         snprintf(buf, sizeof(buf), "Delta: %u mV", p.cellDiff);
         lv_label_set_text(ui.lbl_delta, buf);
 
-        snprintf(buf, sizeof(buf), "PCB: %dC  |  Avg: %dC  |  Max: %dC", p.tempPcb, p.tempAvg, p.tempMax);
+        snprintf(buf, sizeof(buf), "PCB: %dC | Avg: %dC | Max: %dC", p.tempPcb, p.tempAvg, p.tempMax);
         lv_label_set_text(ui.lbl_temps, buf);
 
         // Update 15 Cells Chart & Matrix

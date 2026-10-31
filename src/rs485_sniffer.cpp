@@ -216,6 +216,15 @@ void RS485Sniffer::updateDemo(BatteryPack* packs, SemaphoreHandle_t mutex) {
         b2.cellMax = b2Max;
         b2.cellDiff = b2Max - b2Min; // ~50 mV delta
 
+        // Demo periodic simulation: every 15 seconds simulate a mild warning on Pack #2
+        static uint8_t warnCounter = 0;
+        warnCounter++;
+        if ((warnCounter % 15) >= 11) {
+            b2.warningRaw = 0x0002; // Bit 1: Cell OV Warning
+        } else {
+            b2.warningRaw = 0;
+        }
+
         xSemaphoreGive(mutex);
     }
 }
