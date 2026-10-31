@@ -438,6 +438,31 @@ void WebGateway::setupRoutes() {
         }
         request->send(SD_MMC, filename, "text/csv", true /* download as attachment */);
     });
+
+    // Delete log file: /delete_log?file=bms_bank_log.csv
+    _server->on("/delete_log", HTTP_POST, [](AsyncWebServerRequest *request){
+        if (!Logger.isAvailable()) {
+            request->send(404, "application/json", "{\"status\":\"error\",\"msg\":\"SD Card not available\"}");
+            return;
+        }
+        if (!request->hasParam("file")) {
+            request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Missing file parameter\"}");
+            return;
+        }
+        String filename = request->getParam("file")->value();
+        if (!filename.startsWith("/")) {
+            filename = "/" + filename;
+        }
+        if (!SD_MMC.exists(filename)) {
+            request->send(404, "application/json", "{\"status\":\"error\",\"msg\":\"File not found\"}");
+            return;
+        }
+        if (SD_MMC.remove(filename)) {
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+        } else {
+            request->send(500, "application/json", "{\"status\":\"error\",\"msg\":\"Failed to delete file\"}");
+        }
+    });
 }
 
 String WebGateway::getIpAddress() {
