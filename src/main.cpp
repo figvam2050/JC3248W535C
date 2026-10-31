@@ -22,8 +22,8 @@
 #define LCD_BL_PWM_FREQ     5000
 #define LCD_BL_PWM_RES      8
 #define BRIGHTNESS_HIGH     255
-#define BRIGHTNESS_DIM      25   // ~10% brightness in screensaver
-#define SCREENSAVER_TIMEOUT_MS  (180000) // 3 minutes idle before dimming
+#define BRIGHTNESS_DIM      25
+#define SCREENSAVER_TIMEOUT_MS  (180000)
 
 // --- Touch Pins & Address ---
 #define TOUCH_ADDR       0x3B
@@ -37,7 +37,7 @@
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 480
 
-// Premium Color Palette
+// Premium Colors
 #define CLR_DARK_BG       0x080B10
 #define CLR_PANEL         0x121721
 #define CLR_PANEL_INNER   0x0D1219
@@ -50,29 +50,22 @@
 #define CLR_PURPLE        0xC084FC
 #define CLR_TEXT_MUTED    0x64748B
 
-// Display & Canvas
 static Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_D0, LCD_D1, LCD_D2, LCD_D3);
 static Arduino_GFX *panel = new Arduino_AXS15231B(bus, GFX_NOT_DEFINED, 0, false, SCREEN_WIDTH, SCREEN_HEIGHT);
 static Arduino_Canvas *gfx = new Arduino_Canvas(SCREEN_WIDTH, SCREEN_HEIGHT, panel, 0, 0, 0);
 
-// LVGL Buffers
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t *disp_draw_buf;
 static lv_disp_drv_t disp_drv;
 static lv_indev_drv_t indev_drv;
 
-// Data synchronization
 static SemaphoreHandle_t dataMutex = NULL;
 static BatteryPack g_packs[MAX_BATTERIES];
 
-// Screen Saver & Backlight State
 static uint32_t s_last_touch_time = 0;
 static bool s_is_screen_dimmed = false;
-
-// Audio Alarm State (prevent continuous beep loop)
 static uint32_t s_last_alarm_beep_ms = 0;
 
-// UI Objects
 static lv_obj_t *tabview = NULL;
 static lv_obj_t *tab_overview = NULL;
 
@@ -94,8 +87,9 @@ static lv_obj_t *lbl_alarm_icon = NULL;
 static lv_obj_t *lbl_alarm_title = NULL;
 static lv_obj_t *lbl_alarm_details = NULL;
 
-static lv_obj_t *lbl_autonomy_str = NULL;
-static lv_obj_t *lbl_packs_online = NULL;
+// SD Rec Button Widgets on Overview
+static lv_obj_t *btn_bank_log = NULL;
+static lv_obj_t *lbl_bank_log = NULL;
 static lv_obj_t *lbl_top_ip = NULL;
 
 struct PackUI {
@@ -110,6 +104,8 @@ struct PackUI {
     lv_obj_t *lbl_delta;
     lv_obj_t *card_alarm;
     lv_obj_t *lbl_alarm_text;
+    lv_obj_t *btn_log;
+    lv_obj_t *lbl_log_btn;
     lv_obj_t *chart_cells;
     lv_chart_series_t *ser_cells;
     lv_obj_t *lbl_cells[CELLS_PER_BATTERY];
@@ -118,12 +114,10 @@ struct PackUI {
 };
 static PackUI g_pack_ui[MAX_BATTERIES];
 
-// Backlight Controller
 static void set_backlight_brightness(uint8_t brightness) {
     ledcWrite(LCD_BL_PWM_CHANNEL, brightness);
 }
 
-// Helper: Decode Alarm bits into human readable text
 static String decodeAlarmString(const BatteryPack &p) {
     String res = "";
     uint16_t w = p.warningRaw;
@@ -158,13 +152,40 @@ static String decodeAlarmString(const BatteryPack &p) {
     if (err & 0x0002) res += "Temp Error | ";
     if (err & 0x0010) res += "Cell Unbalance | ";
 
-    if (res.length() > 3) {
-        res.remove(res.length() - 3);
-    }
+    if (res.length() > 3) res.remove(res.length() - 3);
     return res;
 }
 
-// --- Touch Reading with Audio Click & Wakeup ---
+// Button Events
+static void btn_bank_log_cb(lv_event_t * e) {
+    bool logging = Logger.toggleBankLog();
+    if (logging) {
+        lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_ROSE), 0);
+        lv_label_set_text(lbl_bank_log, "REC: BANK LOGGING (ON)");
+    } else {
+        lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_PANEL_INNER), 0);
+        lv_label_set_text(lbl_bank_log, "START BANK LOG (REC)");
+    }
+    BmsAudio.playClick();
+}
+
+static void btn_pack_log_cb(lv_event_t * e) {
+    uintptr_t packIdx = (uintptr_t)lv_event_get_user_data(e);
+    if (packIdx < MAX_BATTERIES) {
+        bool logging = Logger.togglePackLog(packIdx);
+        PackUI &ui = g_pack_ui[packIdx];
+        if (logging) {
+            lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_ROSE), 0);
+            lv_label_set_text(ui.lbl_log_btn, "REC ON");
+        } else {
+            lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_PANEL_INNER), 0);
+            lv_label_set_text(ui.lbl_log_btn, "REC SD");
+        }
+        BmsAudio.playClick();
+    }
+}
+
+// Touch Reading
 static bool touch_read_hw(uint16_t &x, uint16_t &y) {
     uint8_t data[AXS_MAX_TOUCH * 6 + 2] = {0};
     const uint8_t read_cmd[11] = {
@@ -187,16 +208,14 @@ static bool touch_read_hw(uint16_t &x, uint16_t &y) {
         x = ((data[2] & 0x0F) << 8) | data[3];
         y = ((data[4] & 0x0F) << 8) | data[5];
 
-        // Touch event occurred: reset screen saver timer
         s_last_touch_time = millis();
         if (s_is_screen_dimmed) {
             s_is_screen_dimmed = false;
             set_backlight_brightness(BRIGHTNESS_HIGH);
         }
 
-        // Tactile audio feedback (click)
         static uint32_t s_last_click_ms = 0;
-        if (millis() - s_last_click_ms > 120) {
+        if (millis() - s_last_click_ms > 140) {
             s_last_click_ms = millis();
             BmsAudio.playClick();
         }
@@ -255,6 +274,7 @@ static void create_battery_tab(uint8_t pack_idx) {
     PackUI &ui = g_pack_ui[pack_idx];
     ui.tab = tab;
 
+    // 1. Pack Header Card
     lv_obj_t *top_card = create_glass_card(tab, 308, 88);
     lv_obj_align(top_card, LV_ALIGN_TOP_MID, 0, 0);
 
@@ -303,6 +323,7 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_text_font(ui.lbl_soc, &lv_font_montserrat_12, 0);
     lv_obj_align(ui.lbl_soc, LV_ALIGN_BOTTOM_RIGHT, -2, -2);
 
+    // 2. Alarm Banner + Individual REC Button
     ui.card_alarm = create_glass_card(tab, 308, 38);
     lv_obj_align(ui.card_alarm, LV_ALIGN_TOP_MID, 0, 92);
     lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
@@ -312,8 +333,25 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
     lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(ui.lbl_alarm_text, &lv_font_montserrat_12, 0);
-    lv_obj_align(ui.lbl_alarm_text, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(ui.lbl_alarm_text, LV_ALIGN_LEFT_MID, 6, 0);
 
+    // Individual REC Button for this pack
+    ui.btn_log = lv_btn_create(ui.card_alarm);
+    lv_obj_set_size(ui.btn_log, 72, 28);
+    lv_obj_align(ui.btn_log, LV_ALIGN_RIGHT_MID, -2, 0);
+    lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(ui.btn_log, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(ui.btn_log, 1, 0);
+    lv_obj_set_style_radius(ui.btn_log, 6, 0);
+    lv_obj_add_event_cb(ui.btn_log, btn_pack_log_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)pack_idx);
+
+    ui.lbl_log_btn = lv_label_create(ui.btn_log);
+    lv_label_set_text(ui.lbl_log_btn, "REC SD");
+    lv_obj_set_style_text_color(ui.lbl_log_btn, lv_color_white(), 0);
+    lv_obj_set_style_text_font(ui.lbl_log_btn, &lv_font_montserrat_10, 0);
+    lv_obj_align(ui.lbl_log_btn, LV_ALIGN_CENTER, 0, 0);
+
+    // 3. 15S Cell Bar Chart
     lv_obj_t *chart_card = create_glass_card(tab, 308, 92);
     lv_obj_align(chart_card, LV_ALIGN_TOP_MID, 0, 134);
 
@@ -334,6 +372,7 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_pad_all(ui.chart_cells, 2, 0);
     ui.ser_cells = lv_chart_add_series(ui.chart_cells, lv_color_hex(CLR_CYAN), LV_CHART_AXIS_PRIMARY_Y);
 
+    // 4. 15 Cell Values Matrix
     int start_y = 230;
     for (int i = 0; i < CELLS_PER_BATTERY; i++) {
         int row = i / 3;
@@ -383,6 +422,7 @@ static void build_ui() {
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_overview, 6, 0);
 
+    // 1. Status Bar Header
     lv_obj_t *top_bar = create_glass_card(tab_overview, 308, 38);
     lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
 
@@ -398,6 +438,7 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -4, 0);
 
+    // 2. Central Gauge Card
     lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 168);
     lv_obj_align(gauge_card, LV_ALIGN_TOP_MID, 0, 42);
 
@@ -463,6 +504,7 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_current_val, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_current_val, LV_ALIGN_RIGHT_MID, -6, 34);
 
+    // 3. Dynamic Alarm Banner
     card_alarm_banner = create_glass_card(tab_overview, 308, 46);
     lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 214);
     lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0);
@@ -486,6 +528,7 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_alarm_details, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_alarm_details, LV_ALIGN_BOTTOM_LEFT, 20, 0);
 
+    // 4. Bank Health & Delta Card
     lv_obj_t *health_card = create_glass_card(tab_overview, 308, 86);
     lv_obj_align(health_card, LV_ALIGN_TOP_MID, 0, 264);
 
@@ -517,26 +560,30 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_delta_extremes, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_delta_extremes, LV_ALIGN_BOTTOM_LEFT, 2, -2);
 
+    // 5. Interactive REC Button Card on Overview
     lv_obj_t *info_card = create_glass_card(tab_overview, 308, 80);
     lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 354);
 
-    lbl_packs_online = lv_label_create(info_card);
-    lv_label_set_text(lbl_packs_online, "Connected: 2 Packs (Demo)");
-    lv_obj_set_style_text_color(lbl_packs_online, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_packs_online, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_packs_online, LV_ALIGN_TOP_LEFT, 4, 0);
+    btn_bank_log = lv_btn_create(info_card);
+    lv_obj_set_size(btn_bank_log, 292, 36);
+    lv_obj_align(btn_bank_log, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_bank_log, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(btn_bank_log, 1, 0);
+    lv_obj_set_style_radius(btn_bank_log, 8, 0);
+    lv_obj_add_event_cb(btn_bank_log, btn_bank_log_cb, LV_EVENT_CLICKED, NULL);
 
-    lbl_autonomy_str = lv_label_create(info_card);
-    lv_label_set_text(lbl_autonomy_str, "ETA to 100%: ~1 h 40 m");
-    lv_obj_set_style_text_color(lbl_autonomy_str, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_autonomy_str, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_autonomy_str, LV_ALIGN_LEFT_MID, 4, 2);
+    lbl_bank_log = lv_label_create(btn_bank_log);
+    lv_label_set_text(lbl_bank_log, "START BANK LOG (REC SD)");
+    lv_obj_set_style_text_color(lbl_bank_log, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_bank_log, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_bank_log, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_t *bus_tag = lv_label_create(info_card);
-    lv_label_set_text(bus_tag, "BUS: RS485 SNIFFER (SD: ACTIVE)");
+    lv_label_set_text(bus_tag, "BUS: RS485 SNIFFER (TAP TO START / STOP LOG)");
     lv_obj_set_style_text_color(bus_tag, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(bus_tag, &lv_font_montserrat_10, 0);
-    lv_obj_align(bus_tag, LV_ALIGN_BOTTOM_LEFT, 4, -2);
+    lv_obj_align(bus_tag, LV_ALIGN_BOTTOM_MID, 0, -2);
 }
 
 static void update_ui() {
@@ -549,8 +596,16 @@ static void update_ui() {
         return;
     }
 
-    // Log to SD card if present
-    Logger.logPackData(local_packs, MAX_BATTERIES);
+    // Logger writes only if triggered by user button
+    Logger.update(local_packs, MAX_BATTERIES);
+
+    // Update Overview button status if logging
+    if (Logger.isBankLogging()) {
+        char recTxt[48];
+        snprintf(recTxt, sizeof(recTxt), "● REC BANK: %u ROWS", Logger.getBankRows());
+        lv_label_set_text(lbl_bank_log, recTxt);
+        lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_ROSE), 0);
+    }
 
     float vSum = 0;
     float iSum = 0;
@@ -588,10 +643,8 @@ static void update_ui() {
     float avgSoc = (count > 0) ? (socSum / count) : 0.0f;
     uint16_t globalDeltaMv = (count > 0 && gMax >= gMin) ? (gMax - gMin) : 0;
 
-    // Trigger Audible Siren if active alarm (beep once every 30 sec)
     if (alarms && (millis() - s_last_alarm_beep_ms > 30000)) {
         s_last_alarm_beep_ms = millis();
-        // Wake up screen if dimmed
         if (s_is_screen_dimmed) {
             s_is_screen_dimmed = false;
             set_backlight_brightness(BRIGHTNESS_HIGH);
@@ -599,7 +652,6 @@ static void update_ui() {
         BmsAudio.playAlarm();
     }
 
-    // Top IP & SD status
     if (Gateway.isConnected()) {
         char ip_str[32];
         snprintf(ip_str, sizeof(ip_str), "IP: %s", Gateway.getIpAddress().c_str());
@@ -610,7 +662,6 @@ static void update_ui() {
         lv_label_set_text(lbl_top_ip, "Wi-Fi: ...");
     }
 
-    // Top Mode Banner
     if (alarms) {
         lv_label_set_text(lbl_mode_pill, "⚠️ ALARM / PROTECTION DETECTED");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_ROSE), 0);
@@ -633,7 +684,6 @@ static void update_ui() {
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_CYAN), LV_PART_INDICATOR);
     }
 
-    // Dynamic Alarm Banner on Overview
     if (alarms) {
         lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x4C0519), 0);
         lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_ROSE), 0);
@@ -697,22 +747,7 @@ static void update_ui() {
         lv_label_set_text(lbl_delta_extremes, buf);
     }
 
-    snprintf(buf, sizeof(buf), "Connected: %u Packs (%s)", count, Sniffer.demoMode ? "Demo" : "RS485");
-    lv_label_set_text(lbl_packs_online, buf);
-
-    float sumCap = (count * 100.0f) * (avgSoc / 100.0f);
-    if (iSum > 0.5f) {
-        float rem = (count * 100.0f) - sumCap;
-        float h = rem / iSum;
-        snprintf(buf, sizeof(buf), "ETA to 100%%: ~%u h %02u m", (int)h, (int)((h - (int)h) * 60));
-    } else if (iSum < -0.5f) {
-        float h = sumCap / fabsf(iSum);
-        snprintf(buf, sizeof(buf), "Autonomy: ~%u h %02u m", (int)h, (int)((h - (int)h) * 60));
-    } else {
-        snprintf(buf, sizeof(buf), "Standby / Buffer Mode");
-    }
-    lv_label_set_text(lbl_autonomy_str, buf);
-
+    // Individual Pack updates
     for (uint8_t i = 0; i < MAX_BATTERIES; i++) {
         BatteryPack &p = local_packs[i];
         if (!p.isOnline) continue;
@@ -723,6 +758,17 @@ static void update_ui() {
 
         PackUI &ui = g_pack_ui[i];
         bool pHasAlarm = (p.warningRaw || p.protectionRaw || p.errorRaw);
+
+        // Update Pack REC button label
+        if (Logger.isPackLogging(i)) {
+            char recPackTxt[16];
+            snprintf(recPackTxt, sizeof(recPackTxt), "● REC %u", Logger.getPackRows(i));
+            lv_label_set_text(ui.lbl_log_btn, recPackTxt);
+            lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_ROSE), 0);
+        } else {
+            lv_label_set_text(ui.lbl_log_btn, "REC SD");
+            lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_PANEL_INNER), 0);
+        }
 
         if (pHasAlarm) {
             lv_label_set_text(ui.lbl_status, "ALARM");
@@ -737,7 +783,7 @@ static void update_ui() {
             lv_label_set_text(ui.lbl_status, "BALANCING");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_AMBER), 0);
 
-            lv_label_set_text(ui.lbl_alarm_text, "Active cell balancing in progress");
+            lv_label_set_text(ui.lbl_alarm_text, "Active balancing");
             lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_AMBER), 0);
             lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(0x2D2415), 0);
             lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_AMBER), 0);
@@ -745,7 +791,7 @@ static void update_ui() {
             lv_label_set_text(ui.lbl_status, "CHARGING");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_EMERALD), 0);
 
-            lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
+            lv_label_set_text(ui.lbl_alarm_text, "Protection: OK");
             lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
             lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
             lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_BORDER), 0);
@@ -753,7 +799,7 @@ static void update_ui() {
             lv_label_set_text(ui.lbl_status, "DISCHARGING");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_BLUE), 0);
 
-            lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
+            lv_label_set_text(ui.lbl_alarm_text, "Protection: OK");
             lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
             lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
             lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_BORDER), 0);
@@ -761,7 +807,7 @@ static void update_ui() {
             lv_label_set_text(ui.lbl_status, "STANDBY");
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_TEXT_MUTED), 0);
 
-            lv_label_set_text(ui.lbl_alarm_text, "Protection: Normal (No Alarms)");
+            lv_label_set_text(ui.lbl_alarm_text, "Protection: OK");
             lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_EMERALD), 0);
             lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(CLR_PANEL_INNER), 0);
             lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_BORDER), 0);
@@ -820,7 +866,6 @@ static void update_ui() {
     }
 }
 
-// Sniffer & Gateway FreeRTOS task on Core 0
 void sniffer_task(void *pvParameters) {
     while (true) {
         Sniffer.update(g_packs, dataMutex);
@@ -832,19 +877,14 @@ void sniffer_task(void *pvParameters) {
 void setup() {
     Serial.begin(115200);
     delay(500);
-    Serial.println("\n==============================================");
-    Serial.println("  JC3248W535C Smart BMS Master (Sound+Dim+SD)");
-    Serial.println("==============================================");
 
     dataMutex = xSemaphoreCreateMutex();
 
-    // 1. Backlight PWM Setup
     ledcSetup(LCD_BL_PWM_CHANNEL, LCD_BL_PWM_FREQ, LCD_BL_PWM_RES);
     ledcAttachPin(LCD_BL, LCD_BL_PWM_CHANNEL);
     set_backlight_brightness(BRIGHTNESS_HIGH);
     s_last_touch_time = millis();
 
-    // 2. Touch reset & I2C
     pinMode(TOUCH_INT_PIN, INPUT_PULLUP);
     pinMode(TOUCH_RST_PIN, OUTPUT);
     digitalWrite(TOUCH_RST_PIN, LOW);
@@ -855,14 +895,12 @@ void setup() {
     Wire.begin(TOUCH_SDA, TOUCH_SCL);
     Wire.setClock(TOUCH_I2C_CLOCK);
 
-    // 3. Init Display & Canvas (in PSRAM)
     if (!gfx->begin()) {
         Serial.println("[Display] Error: gfx->begin() failed!");
     }
     gfx->fillScreen(RGB565_BLACK);
     gfx->flush();
 
-    // 4. Init LVGL
     lv_init();
 
     disp_draw_buf = (lv_color_t *)ps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t));
@@ -880,29 +918,21 @@ void setup() {
     disp_drv.draw_buf = &draw_buf;
     lv_disp_drv_register(&disp_drv);
 
-    // Touch driver
     lv_indev_drv_init(&indev_drv);
     indev_drv.type = LV_INDEV_TYPE_POINTER;
     indev_drv.read_cb = my_touchpad_read;
     lv_indev_drv_register(&indev_drv);
 
-    // 5. Init Audio NS4168
     BmsAudio.begin();
-    BmsAudio.playBeep(1200, 80); // Startup chirp
+    BmsAudio.playBeep(1200, 80);
 
-    // 6. Init MicroSD Logger
     Logger.begin();
 
-    // 7. Build UI
     build_ui();
 
-    // 8. Start RS485 Sniffer
     Sniffer.begin();
-
-    // 9. Start Web Gateway & Wi-Fi
     Gateway.begin(g_packs, dataMutex);
 
-    // 10. Launch Background Task on Core 0
     xTaskCreatePinnedToCore(
         sniffer_task,
         "SnifferTask",
@@ -913,19 +943,17 @@ void setup() {
         0
     );
 
-    Serial.println("[System] Ready with Sound, PWM Screen Saver & SD Logging!");
+    Serial.println("[System] Ready with On-Demand Logging!");
 }
 
 void loop() {
     lv_timer_handler();
 
-    // Screen Saver Check (Dim screen after 3 mins idle)
     if (!s_is_screen_dimmed && (millis() - s_last_touch_time > SCREENSAVER_TIMEOUT_MS)) {
         s_is_screen_dimmed = true;
         set_backlight_brightness(BRIGHTNESS_DIM);
     }
 
-    // Refresh UI data at ~2 Hz
     static uint32_t last_ui_update = 0;
     if (millis() - last_ui_update >= 500) {
         last_ui_update = millis();
