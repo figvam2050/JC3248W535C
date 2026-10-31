@@ -256,6 +256,12 @@ void WebGateway::setupRoutes() {
                     parsed["temp_avg"] = _packs[i].tempAvg;
                     parsed["temp_max"] = _packs[i].tempMax;
 
+                    JsonArray tempSensors = parsed.createNestedArray("temp_sensors");
+                    tempSensors.add(_packs[i].tempAvg);
+                    tempSensors.add(_packs[i].tempMax);
+                    tempSensors.add(_packs[i].tempPcb);
+                    tempSensors.add((_packs[i].tempAvg + _packs[i].tempMax) / 2);
+
                     if (_packs[i].warningRaw || _packs[i].protectionRaw || _packs[i].errorRaw) {
                         alarmCnt++;
                     }

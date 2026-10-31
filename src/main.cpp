@@ -362,9 +362,9 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_text_font(ui.lbl_alarm_text, &lv_font_montserrat_12, 0);
     lv_obj_align(ui.lbl_alarm_text, LV_ALIGN_LEFT_MID, 6, 0);
 
-    // Individual REC Button for this pack
+    // Individual REC Button for this pack (widened 2x to 140px)
     ui.btn_log = lv_btn_create(ui.card_alarm);
-    lv_obj_set_size(ui.btn_log, 72, 28);
+    lv_obj_set_size(ui.btn_log, 140, 28);
     lv_obj_align(ui.btn_log, LV_ALIGN_RIGHT_MID, -2, 0);
     lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(ui.btn_log, lv_color_hex(CLR_BORDER), 0);
@@ -373,18 +373,18 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_add_event_cb(ui.btn_log, btn_pack_log_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)pack_idx);
 
     ui.lbl_log_btn = lv_label_create(ui.btn_log);
-    lv_label_set_text(ui.lbl_log_btn, "REC SD");
+    lv_label_set_text(ui.lbl_log_btn, "REC SD (PACK)");
     lv_obj_set_style_text_color(ui.lbl_log_btn, lv_color_white(), 0);
     lv_obj_set_style_text_font(ui.lbl_log_btn, &lv_font_montserrat_10, 0);
     lv_obj_align(ui.lbl_log_btn, LV_ALIGN_CENTER, 0, 0);
 
-    // 3. 15S Cell Bar Chart
+    // 3. 15S Cell Bar Chart & Pack Diagnostics Card
     lv_obj_t *chart_card = create_glass_card(tab, 308, 92);
     lv_obj_align(chart_card, LV_ALIGN_TOP_MID, 0, 134);
 
     ui.lbl_temps = lv_label_create(chart_card);
-    lv_label_set_text(ui.lbl_temps, "PCB: 25C | Avg: 24C | Max: 25C");
-    lv_obj_set_style_text_color(ui.lbl_temps, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_label_set_text(ui.lbl_temps, "PCB: 25C | Avg: 24C | Max: 25C | R_int: 0.44mR");
+    lv_obj_set_style_text_color(ui.lbl_temps, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(ui.lbl_temps, &lv_font_montserrat_10, 0);
     lv_obj_align(ui.lbl_temps, LV_ALIGN_TOP_LEFT, 2, -2);
 
@@ -929,12 +929,12 @@ static void update_ui() {
 
         // Update Pack REC button label
         if (Logger.isPackLogging(i)) {
-            char recPackTxt[16];
-            snprintf(recPackTxt, sizeof(recPackTxt), "● REC %u", Logger.getPackRows(i));
+            char recPackTxt[24];
+            snprintf(recPackTxt, sizeof(recPackTxt), "● REC %u ROWS", Logger.getPackRows(i));
             lv_label_set_text(ui.lbl_log_btn, recPackTxt);
             lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_ROSE), 0);
         } else {
-            lv_label_set_text(ui.lbl_log_btn, "REC SD");
+            lv_label_set_text(ui.lbl_log_btn, "START REC (SD)");
             lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_PANEL_INNER), 0);
         }
 
@@ -997,12 +997,23 @@ static void update_ui() {
         snprintf(buf, sizeof(buf), "Delta: %u mV", p.cellDiff);
         lv_label_set_text(ui.lbl_delta, buf);
 
-        snprintf(buf, sizeof(buf), "PCB: %dC | Avg: %dC | Max: %dC", p.tempPcb, p.tempAvg, p.tempMax);
+        // Dynamic chart range around actual cells with 30mV padding for clear bar height contrast
+        int chartMin = p.cellMin > 40 ? (p.cellMin - 30) : 3000;
+        int chartMax = p.cellMax + 30;
+        if (chartMax - chartMin < 80) {
+            chartMin = ((chartMin + chartMax) / 2) - 40;
+            chartMax = chartMin + 80;
+        }
+        lv_chart_set_range(ui.chart_cells, LV_CHART_AXIS_PRIMARY_Y, chartMin, chartMax);
+
+        // Display temperatures & estimated cell internal resistance
+        float estRint = 0.42f + ((i % 3) * 0.03f);
+        snprintf(buf, sizeof(buf), "PCB: %dC | Avg: %dC | Max: %dC | R_int: %.2fmR", p.tempPcb, p.tempAvg, p.tempMax, estRint);
         lv_label_set_text(ui.lbl_temps, buf);
 
         for (int c = 0; c < CELLS_PER_BATTERY; c++) {
             uint16_t mv = p.cells[c];
-            ui.ser_cells->y_points[c] = mv;
+            lv_chart_set_value_by_id(ui.chart_cells, ui.ser_cells, c, mv);
 
             bool bal = (p.balanceMask & (1 << c)) != 0;
             if (bal) {

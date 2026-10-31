@@ -203,12 +203,12 @@ void RS485Sniffer::updateDemo(BatteryPack* packs, SemaphoreHandle_t mutex) {
         b2.cycles = 118;
         b2.balanceMask = (1 << 11) | (1 << 13); // Cell 12 and 14 balancing
 
-        uint16_t base2 = 3445;
+        uint16_t base2 = 3445 + random(-4, 4);
         uint16_t b2Min = 5000, b2Max = 0;
         for (int i = 0; i < CELLS_PER_BATTERY; i++) {
-            if (i == 4) b2.cells[i] = base2 - 32;       // Lagging cell #5
-            else if (i == 11) b2.cells[i] = base2 + 18; // High cell #12 [BAL]
-            else b2.cells[i] = base2 + (i % 4) * 2;
+            if (i == 4) b2.cells[i] = base2 - 32 + random(-2, 2);       // Lagging cell #5
+            else if (i == 11) b2.cells[i] = base2 + 18 + random(-2, 2); // High cell #12 [BAL]
+            else b2.cells[i] = base2 + (i % 4) * 2 + random(-1, 2);
             if (b2.cells[i] < b2Min) b2Min = b2.cells[i];
             if (b2.cells[i] > b2Max) b2Max = b2.cells[i];
         }
