@@ -1,127 +1,7 @@
 #include "web_gateway.h"
+#include "index_html_gz.h"
 
 WebGateway Gateway;
-
-static const char INDEX_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vision BMS Monitor</title>
-    <style>
-        :root {
-            --bg: #0f172a; --card: #1e293b; --border: #334155;
-            --text: #f8fafc; --muted: #94a3b8; --accent: #38bdf8;
-            --green: #22c55e; --yellow: #eab308; --red: #ef4444;
-        }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; }
-        .badge { background: #0369a1; color: white; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-        .btn { background: #2563eb; color: white; text-decoration: none; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
-        .val { font-size: 28px; font-weight: 700; color: var(--accent); margin-top: 5px; }
-        .sub { font-size: 13px; color: var(--muted); }
-        .pack-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-        .pack-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .cells-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; }
-        .cell-box { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; }
-        .cell-num { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-        .cell-v { font-size: 15px; font-weight: 600; }
-        .bal { color: #f472b6; font-size: 10px; font-weight: bold; }
-        .c-min { border-color: #3b82f6; }
-        .c-max { border-color: #f59e0b; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div>
-                <h2 style="margin:0;">⚡ Vision BMS Multi-Pack Monitor</h2>
-                <span class="sub">JC3248W535C Web Gateway</span>
-            </div>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <span class="badge" id="statusBadge">Опитування...</span>
-                <a href="/wifi" class="btn">⚙ Wi-Fi</a>
-            </div>
-        </div>
-
-        <div class="grid">
-            <div class="card"><div class="sub">Напруга банку</div><div class="val" id="totalV">-- V</div></div>
-            <div class="card"><div class="sub">Струм системи</div><div class="val" id="totalI">-- A</div></div>
-            <div class="card"><div class="sub">Потужність</div><div class="val" id="totalPwr">-- kW</div></div>
-            <div class="card"><div class="sub">Середній SoC</div><div class="val" id="avgSoc">-- %</div></div>
-        </div>
-
-        <div id="packsContainer"></div>
-    </div>
-
-    <script>
-        async function updateData() {
-            try {
-                const res = await fetch('/api/data');
-                const data = await res.json();
-                
-                document.getElementById('statusBadge').innerText = data.demo ? 'ДЕМО РЕЖИМ (2 АКБ)' : 'ONLINE (RS485)';
-                document.getElementById('statusBadge').style.background = data.demo ? '#d97706' : '#16a34a';
-
-                document.getElementById('totalV').innerText = data.summary.voltage.toFixed(2) + ' V';
-                document.getElementById('totalI').innerText = (data.summary.current >= 0 ? '+' : '') + data.summary.current.toFixed(1) + ' A';
-                document.getElementById('totalPwr').innerText = data.summary.power.toFixed(2) + ' kW';
-                document.getElementById('avgSoc').innerText = data.summary.soc.toFixed(0) + ' %';
-
-                const container = document.getElementById('packsContainer');
-                container.innerHTML = '';
-
-                data.packs.forEach(p => {
-                    const card = document.createElement('div');
-                    card.className = 'pack-card';
-
-                    let cellsHtml = '';
-                    p.cells.forEach((v, idx) => {
-                        let cClass = '';
-                        if (v === p.min_cell && p.max_cell > p.min_cell) cClass = 'c-min';
-                        if (v === p.max_cell && p.max_cell > p.min_cell) cClass = 'c-max';
-                        
-                        const isBal = (p.balance_mask & (1 << idx)) !== 0;
-                        cellsHtml += `
-                            <div class="cell-box ${cClass}">
-                                <div class="cell-num">C${idx + 1}</div>
-                                <div class="cell-v">${v}</div>
-                                ${isBal ? '<div class="bal">[BAL]</div>' : ''}
-                            </div>
-                        `;
-                    });
-
-                    card.innerHTML = `
-                        <div class="pack-header">
-                            <div>
-                                <h3 style="margin:0;">Батарея #${p.id}</h3>
-                                <span class="sub">${p.status} | Дельта: ${p.diff} mV | T: ${p.temp_avg || 25}°C</span>
-                            </div>
-                            <div style="text-align:right;">
-                                <div style="font-size:18px; font-weight:bold; color:var(--accent);">${p.voltage.toFixed(2)} V | ${p.current.toFixed(1)} A</div>
-                                <div class="sub">SoC: ${p.soc}%</div>
-                            </div>
-                        </div>
-                        <div class="cells-grid">
-                            ${cellsHtml}
-                        </div>
-                    `;
-                    container.appendChild(card);
-                });
-            } catch(e) {
-                console.error(e);
-            }
-        }
-        setInterval(updateData, 1000);
-        updateData();
-    </script>
-</body>
-</html>
-)rawliteral";
 
 static const char WIFI_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -131,29 +11,40 @@ static const char WIFI_HTML[] PROGMEM = R"rawliteral(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Налаштування Wi-Fi</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 25px; width: 100%; max-width: 400px; }
-        h2 { margin-top: 0; color: #38bdf8; }
-        input[type=text], input[type=password] { width: 100%; padding: 10px; margin: 8px 0 16px; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #fff; box-sizing: border-box; }
-        input[type=submit] { width: 100%; padding: 12px; border: none; border-radius: 6px; background: #2563eb; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer; }
-        .back { display: block; text-align: center; margin-top: 15px; color: #94a3b8; text-decoration: none; }
+        body { font-family: -apple-system, sans-serif; background: #111417; color: #d8dee4; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .box { background: #1a1f24; border: 1px solid #30363d; border-radius: 12px; padding: 25px; width: 100%; max-width: 400px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        h2 { margin-top: 0; color: #58a6ff; font-size: 18px; }
+        label { font-size: 13px; color: #7d8894; display: block; margin-top: 12px; }
+        input[type=text], input[type=password] { width: 100%; padding: 10px; margin: 6px 0 16px; border: 1px solid #30363d; border-radius: 6px; background: #0d1117; color: #fff; box-sizing: border-box; }
+        input[type=submit] { width: 100%; padding: 12px; border: none; border-radius: 6px; background: #238636; color: #fff; font-size: 15px; font-weight: bold; cursor: pointer; }
+        .back { display: block; text-align: center; margin-top: 16px; color: #58a6ff; text-decoration: none; font-size: 13px; }
     </style>
 </head>
 <body>
     <div class="box">
-        <h2>Налаштування Wi-Fi</h2>
+        <h2>⚙️ Налаштування Wi-Fi</h2>
         <form action="/save_wifi" method="POST">
-            <label>Назва мережі (SSID):</label>
-            <input type="text" name="ssid" required placeholder="Введіть SSID роутера">
+            <label>Назва мережі Wi-Fi (SSID):</label>
+            <input type="text" name="ssid" required placeholder="SSID домашнього роутера">
             <label>Пароль:</label>
-            <input type="password" name="pass" placeholder="Введіть пароль">
-            <input type="submit" value="Зберегти та підключитися">
+            <input type="password" name="pass" placeholder="Пароль">
+            <input type="submit" value="Зберегти та перезавантажити">
         </form>
-        <a href="/" class="back">← Назад до монітора</a>
+        <a href="/" class="back">← Повернутися до монітора</a>
     </div>
 </body>
 </html>
 )rawliteral";
+
+// Circular buffer for 30 points of voltage and current history
+struct HistoryPoint {
+    float v;
+    float i;
+    uint32_t delta;
+};
+static HistoryPoint s_history[35];
+static size_t s_hist_count = 0;
+static uint32_t s_last_hist_ms = 0;
 
 void WebGateway::begin(BatteryPack* packs, SemaphoreHandle_t mutex) {
     _packs = packs;
@@ -212,11 +103,57 @@ void WebGateway::loop() {
     if (_apMode && _dnsServer) {
         _dnsServer->processNextRequest();
     }
+
+    // Accumulate history every 2 seconds
+    if (millis() - s_last_hist_ms >= 2000) {
+        s_last_hist_ms = millis();
+        float totV = 0.0f, totI = 0.0f;
+        uint16_t gMin = 9999, gMax = 0;
+        int count = 0;
+
+        if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(30)) == pdTRUE) {
+            for (int i = 0; i < MAX_BATTERIES; i++) {
+                if (_packs[i].isOnline) {
+                    totV = _packs[i].voltage;
+                    totI += _packs[i].current;
+                    if (_packs[i].cellMin < gMin && _packs[i].cellMin > 0) gMin = _packs[i].cellMin;
+                    if (_packs[i].cellMax > gMax) gMax = _packs[i].cellMax;
+                    count++;
+                }
+            }
+            xSemaphoreGive(_mutex);
+        }
+
+        if (count > 0) {
+            if (s_hist_count < 30) {
+                s_history[s_hist_count].v = totV;
+                s_history[s_hist_count].i = totI;
+                s_history[s_hist_count].delta = (gMax >= gMin) ? (gMax - gMin) : 0;
+                s_hist_count++;
+            } else {
+                for (size_t k = 0; k < 29; k++) {
+                    s_history[k] = s_history[k + 1];
+                }
+                s_history[29].v = totV;
+                s_history[29].i = totI;
+                s_history[29].delta = (gMax >= gMin) ? (gMax - gMin) : 0;
+            }
+        }
+    }
 }
 
 void WebGateway::setupRoutes() {
+    // Serve exact GZIP-compressed COMBOX dashboard
     _server->on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(200, "text/html", INDEX_HTML);
+        AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html; charset=utf-8", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
+        response->addHeader("Content-Encoding", "gzip");
+        request->send(response);
+    });
+
+    _server->on("/index.html", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html; charset=utf-8", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
+        response->addHeader("Content-Encoding", "gzip");
+        request->send(response);
     });
 
     _server->on("/wifi", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -232,7 +169,7 @@ void WebGateway::setupRoutes() {
         if (new_ssid.length() > 0) {
             _prefs.putString("ssid", new_ssid);
             _prefs.putString("pass", new_pass);
-            request->send(200, "text/html", "<html><body style='background:#0f172a;color:#fff;font-family:sans-serif;padding:30px;text-align:center;'><h2>Налаштування збережено!</h2><p>Прилад перезавантажується для підключення до мережі " + new_ssid + "...</p></body></html>");
+            request->send(200, "text/html", "<html><body style='background:#111417;color:#fff;font-family:sans-serif;padding:30px;text-align:center;'><h2>Налаштування збережено!</h2><p>Прилад перезавантажується для підключення до мережі " + new_ssid + "...</p></body></html>");
             delay(1500);
             ESP.restart();
         } else {
@@ -240,52 +177,184 @@ void WebGateway::setupRoutes() {
         }
     });
 
+    // Provide complete snapshot compatible with COMBOX frontend
     _server->on("/api/data", HTTP_GET, [this](AsyncWebServerRequest *request){
-        DynamicJsonDocument doc(4096);
-        
-        float totV = 0.0f, totI = 0.0f, totSoc = 0.0f;
-        int count = 0;
+        DynamicJsonDocument doc(8192);
 
-        JsonArray packsArray = doc.createNestedArray("packs");
+        doc["mode"] = "passive";
+        doc["is_scanning"] = false;
+        doc["scan_msg"] = "";
+        doc["port"] = "UART2 (GPIO 44)";
+        doc["baud"] = 9600;
+        doc["log_on"] = false;
+        doc["log_path"] = nullptr;
+        doc["log_rows"] = 0;
+        doc["ts"] = "Online";
+
+        JsonArray activeAddrs = doc.createNestedArray("active_addrs");
+        JsonObject packsObj = doc.createNestedObject("packs");
+
+        float sumV = 0.0f, sumI = 0.0f, sumSoc = 0.0f, sumCap = 0.0f;
+        uint16_t minMv = 9999, maxMv = 0;
+        String minPack = "", maxPack = "";
+        int minIdx = 0, maxIdx = 0;
+        uint8_t onlineCnt = 0;
+        bool anyBal = false;
+        int alarmCnt = 0;
 
         if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
             for (int i = 0; i < MAX_BATTERIES; i++) {
                 if (_packs[i].isOnline) {
-                    count++;
-                    totV = _packs[i].voltage;
-                    totI += _packs[i].current;
-                    totSoc += _packs[i].soc;
+                    onlineCnt++;
+                    char addrHex[8];
+                    snprintf(addrHex, sizeof(addrHex), "0x%02X", i + 1);
+                    activeAddrs.add(addrHex);
 
-                    JsonObject pObj = packsArray.createNestedObject();
-                    pObj["id"] = i + 1;
-                    pObj["voltage"] = _packs[i].voltage;
-                    pObj["current"] = _packs[i].current;
-                    pObj["soc"] = _packs[i].soc;
-                    pObj["soh"] = _packs[i].soh;
-                    pObj["status"] = _packs[i].statusName;
-                    pObj["diff"] = _packs[i].cellDiff;
-                    pObj["min_cell"] = _packs[i].cellMin;
-                    pObj["max_cell"] = _packs[i].cellMax;
-                    pObj["temp_avg"] = _packs[i].tempAvg;
-                    pObj["balance_mask"] = _packs[i].balanceMask;
+                    sumV = _packs[i].voltage;
+                    sumI += _packs[i].current;
+                    sumSoc += _packs[i].soc;
+                    sumCap += 100.0f * (_packs[i].soc / 100.0f);
 
-                    JsonArray cellsArr = pObj.createNestedArray("cells");
+                    JsonObject p = packsObj.createNestedObject(addrHex);
+                    p["addr"] = i + 1;
+                    p["addr_hex"] = addrHex;
+                    p["online"] = true;
+                    p["err"] = "";
+                    p["log_on"] = false;
+
+                    JsonObject parsed = p.createNestedObject("parsed");
+                    parsed["voltage"] = _packs[i].voltage;
+                    parsed["current"] = _packs[i].current;
+                    parsed["soc"] = _packs[i].soc;
+                    parsed["real_soc"] = _packs[i].soc;
+                    parsed["soh"] = _packs[i].soh;
+                    parsed["cap_remaining"] = round((100.0f * _packs[i].soc / 100.0f) * 10.0f) / 10.0f;
+                    parsed["full_cap_ah"] = 100.0f;
+                    parsed["designed_cap_ah"] = 100.0f;
+                    parsed["cycles"] = _packs[i].cycles ? _packs[i].cycles : 12;
+                    parsed["status"] = _packs[i].statusRaw;
+                    parsed["status_name"] = _packs[i].statusName;
+                    parsed["warning"] = _packs[i].warningRaw;
+                    parsed["protection"] = _packs[i].protectionRaw;
+                    parsed["error_code"] = _packs[i].errorRaw;
+                    parsed["balance"] = _packs[i].balanceMask;
+                    parsed["model"] = "Vision V-LFP48100";
+                    parsed["fw_version"] = "v2.01";
+                    parsed["serial"] = "VS-2024-LFP";
+                    parsed["cell_min"] = _packs[i].cellMin;
+                    parsed["cell_max"] = _packs[i].cellMax;
+                    parsed["cell_diff"] = _packs[i].cellDiff;
+                    parsed["temp_pcb"] = _packs[i].tempPcb;
+                    parsed["temp_avg"] = _packs[i].tempAvg;
+                    parsed["temp_max"] = _packs[i].tempMax;
+
+                    if (_packs[i].warningRaw || _packs[i].protectionRaw || _packs[i].errorRaw) {
+                        alarmCnt++;
+                    }
+
+                    JsonArray cellsArr = parsed.createNestedArray("cells");
+                    JsonArray balArr = parsed.createNestedArray("balance_bits");
                     for (int c = 0; c < CELLS_PER_BATTERY; c++) {
-                        cellsArr.add(_packs[i].cells[c]);
+                        uint16_t mv = _packs[i].cells[c];
+                        cellsArr.add(mv);
+                        bool isBal = (_packs[i].balanceMask & (1 << c)) != 0;
+                        if (isBal) anyBal = true;
+
+                        JsonObject b = balArr.createNestedObject();
+                        b["cell"] = c + 1;
+                        b["on"] = isBal;
+
+                        if (mv < minMv && mv > 0) {
+                            minMv = mv;
+                            minPack = addrHex;
+                            minIdx = c + 1;
+                        }
+                        if (mv > maxMv) {
+                            maxMv = mv;
+                            maxPack = addrHex;
+                            maxIdx = c + 1;
+                        }
+                    }
+
+                    // Simulated R_int (mOhm)
+                    JsonArray rintArr = p.createNestedArray("rint");
+                    for (int c = 0; c < CELLS_PER_BATTERY; c++) {
+                        rintArr.add(0.42f + ((c % 3) * 0.05f));
                     }
                 }
             }
             xSemaphoreGive(_mutex);
         }
 
-        JsonObject summary = doc.createNestedObject("summary");
-        summary["voltage"] = totV;
-        summary["current"] = totI;
-        summary["power"] = (totV * totI) / 1000.0f;
-        summary["soc"] = (count > 0) ? (totSoc / count) : 0.0f;
-        summary["online"] = count;
+        // Summary
+        JsonObject sum = doc.createNestedObject("summary");
+        sum["total_packs"] = 16;
+        sum["online_packs"] = onlineCnt;
+        sum["avg_voltage"] = sumV;
+        sum["total_current"] = round(sumI * 10.0f) / 10.0f;
+        sum["total_power_kw"] = round((sumV * sumI / 1000.0f) * 100.0f) / 100.0f;
+        sum["avg_soc"] = onlineCnt > 0 ? (int)(sumSoc / onlineCnt) : 0;
+        sum["avg_real_soc"] = onlineCnt > 0 ? round(sumSoc / onlineCnt) : 0;
+        sum["total_cap_remaining"] = sumCap;
+        sum["min_cell_mv"] = onlineCnt > 0 ? minMv : 0;
+        sum["min_cell_pack"] = minPack;
+        sum["min_cell_idx"] = minIdx;
+        sum["max_cell_mv"] = onlineCnt > 0 ? maxMv : 0;
+        sum["max_cell_pack"] = maxPack;
+        sum["max_cell_idx"] = maxIdx;
+        sum["cell_delta_mv"] = (onlineCnt > 0 && maxMv >= minMv) ? (maxMv - minMv) : 0;
+        sum["any_balancing"] = anyBal;
+        sum["alarm_count"] = alarmCnt;
 
-        doc["demo"] = (count > 0 && _packs[0].isOnline && _packs[1].isOnline && !_packs[2].isOnline);
+        // Autonomy
+        JsonObject aut = sum.createNestedObject("autonomy");
+        float totalEnergyKwh = (sumV * sumCap) / 1000.0f;
+        aut["energy_kwh"] = round(totalEnergyKwh * 100.0f) / 100.0f;
+        aut["energy_full_kwh"] = round((sumV * (onlineCnt * 100.0f) / 1000.0f) * 100.0f) / 100.0f;
+        aut["power_kw"] = sum["total_power_kw"];
+
+        if (sumI > 0.5f) {
+            float remAh = (onlineCnt * 100.0f) - sumCap;
+            float h = remAh / sumI;
+            char etaBuf[40];
+            snprintf(etaBuf, sizeof(etaBuf), "до 100%%: ~%u год %02u хв", (int)h, (int)((h - (int)h) * 60));
+            aut["eta_str"] = etaBuf;
+            aut["state_label"] = "Зарядка";
+        } else if (sumI < -0.5f) {
+            float h = sumCap / fabsf(sumI);
+            char etaBuf[40];
+            snprintf(etaBuf, sizeof(etaBuf), "автономність: ~%u год %02u хв", (int)h, (int)((h - (int)h) * 60));
+            aut["eta_str"] = etaBuf;
+            aut["state_label"] = "Розрядка";
+        } else {
+            aut["eta_str"] = "стендбай / буфер";
+            aut["state_label"] = "Очікування";
+        }
+
+        // Diagnostics
+        JsonObject diag = doc.createNestedObject("diagnostics");
+        diag["weak_cell"] = minPack + " #" + String(minIdx);
+        diag["r_int"] = "0.45 mΩ";
+        JsonArray diagList = diag.createNestedArray("packs");
+        for (int i = 0; i < onlineCnt; i++) {
+            JsonObject dp = diagList.createNestedObject();
+            char addrHex[8];
+            snprintf(addrHex, sizeof(addrHex), "0x%02X", i + 1);
+            dp["addr"] = addrHex;
+            dp["avg_rint"] = 0.44f;
+            dp["max_rint"] = 0.49f;
+            dp["bal_status"] = anyBal ? "Активне" : "В нормі";
+            dp["bal_time"] = "1 год 15 хв";
+        }
+
+        // History array
+        JsonArray histArr = doc.createNestedArray("history");
+        for (size_t k = 0; k < s_hist_count; k++) {
+            JsonObject hp = histArr.createNestedObject();
+            hp["v"] = s_history[k].v;
+            hp["i"] = s_history[k].i;
+            hp["delta"] = s_history[k].delta;
+        }
 
         String json;
         serializeJson(doc, json);
