@@ -453,7 +453,7 @@ canvas{width:100%;height:auto;display:block}
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button id="logbtn" onclick="toggleLog()">Старт запису на MicroSD (усі)</button>
       <button id="web_rec_btn" onclick="toggleWebBankRecord()" style="background:#238636;color:#fff;font-weight:600">💻 Запис банку в браузер (CSV)</button>
-      <button onclick="refreshSdFiles()" style="background:#30363d;color:#fff">🔄 Оновити файли SD</button>
+      <button id="btn_refresh_sd" onclick="refreshSdFiles()" style="background:#30363d;color:#fff">🔄 Оновити файли SD</button>
     </div>
   </div>
 
@@ -2147,16 +2147,31 @@ let webPackRows = [];
 let recordingPackAddr = null;
 
 async function refreshSdFiles() {
+  const btn = document.getElementById('btn_refresh_sd');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Опитування SD...';
+  }
   try {
     const res = await fetch('/api/logs');
     if (res.ok) {
       const data = await res.json();
       window.sdFilesList = data.files || [];
       renderSdFilesTable();
+      if (btn) btn.textContent = ;
+    } else {
+      if (btn) btn.textContent = '❌ Помилка SD';
     }
   } catch(e) {
     console.warn('Error fetching /api/logs:', e);
+    if (btn) btn.textContent = '❌ Помилка мережі';
   }
+  setTimeout(() => {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 Оновити файли SD';
+    }
+  }, 1500);
 }
 
 function renderSdFilesTable() {
