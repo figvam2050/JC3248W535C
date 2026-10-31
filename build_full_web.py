@@ -127,7 +127,7 @@ async function refreshSdFiles() {
       const data = await res.json();
       window.sdFilesList = data.files || [];
       renderSdFilesTable();
-      if (btn) btn.textContent = ;
+      if (btn) btn.textContent = '✅ Оновлено (' + window.sdFilesList.length + ')';
     } else {
       if (btn) btn.textContent = '❌ Помилка SD';
     }

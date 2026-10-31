@@ -1,6 +1,7 @@
 #include "web_gateway.h"
 #include "index_html_gz.h"
 #include "sd_logger.h"
+#include "rs485_sniffer.h"
 
 WebGateway Gateway;
 
@@ -183,6 +184,7 @@ void WebGateway::setupRoutes() {
         DynamicJsonDocument doc(8192);
 
         doc["mode"] = "passive";
+        doc["demo"] = Sniffer.demoMode;
         doc["is_scanning"] = false;
         doc["scan_msg"] = "";
         doc["port"] = "UART2 (GPIO 44)";

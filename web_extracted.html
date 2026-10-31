@@ -1955,8 +1955,11 @@ async function tick() {
     if (d.is_scanning) {
       c.textContent = d.scan_msg || 'СКАНУВАННЯ...';
       c.className = 'pill warn';
+    } else if (d.demo) {
+      c.textContent = 'ДЕМО-РЕЖИМ (' + onlineCnt + ' АКБ)';
+      c.className = 'pill warn';
     } else if (onlineCnt > 0) {
-      c.textContent = `${onlineCnt} АКБ ОНЛАЙН`;
+      c.textContent = onlineCnt + ' АКБ ОНЛАЙН';
       c.className = 'pill ok';
     } else {
       c.textContent = 'НЕМАЄ ЗВ’ЯЗКУ';
@@ -1969,7 +1972,7 @@ async function tick() {
     mbtn.className = 'btn-mode' + (isPassive ? ' passive' : '');
 
     document.getElementById('portinfo').textContent = d.port + ' @ ' + d.baud;
-    document.getElementById('modedesc').textContent = isPassive ? 'Пасивний (слухає шину без передачі)' : 'Активний (автопошук та опитування FC03)';
+    document.getElementById('modedesc').textContent = (d.demo ? '🎮 ДЕМО-СИМУЛЯЦІЯ (генерація 4 АКБ)' : (isPassive ? 'Пасивний (слухає шину без передачі)' : 'Активний (автопошук та опитування FC03)'));
     document.getElementById('seeninfo').textContent = 'Онлайн: ' + (d.active_addrs && d.active_addrs.length ? d.active_addrs.join(', ') : 'жодного');
     document.getElementById('ts').textContent = d.ts || '—';
 
@@ -2158,7 +2161,7 @@ async function refreshSdFiles() {
       const data = await res.json();
       window.sdFilesList = data.files || [];
       renderSdFilesTable();
-      if (btn) btn.textContent = ;
+      if (btn) btn.textContent = '✅ Оновлено (' + window.sdFilesList.length + ')';
     } else {
       if (btn) btn.textContent = '❌ Помилка SD';
     }

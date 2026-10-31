@@ -225,6 +225,60 @@ void RS485Sniffer::updateDemo(BatteryPack* packs, SemaphoreHandle_t mutex) {
             b2.warningRaw = 0;
         }
 
+        // Battery 3: Healthy pack in float/charge
+        BatteryPack& b3 = packs[2];
+        b3.isOnline = true;
+        b3.lastSeenMs = millis();
+        b3.voltage = 51.80f + (float)(random(-8, 8)) / 100.0f;
+        b3.current = 15.1f + (float)(random(-4, 4)) / 10.0f;
+        b3.soc = 75;
+        b3.soh = 98;
+        b3.tempPcb = 25;
+        b3.tempAvg = 24;
+        b3.tempMax = 26;
+        b3.statusName = "Charging";
+        b3.cycles = 55;
+        b3.balanceMask = 0;
+
+        uint16_t base3 = 3448 + random(-4, 4);
+        uint16_t b3Min = 5000, b3Max = 0;
+        for (int i = 0; i < CELLS_PER_BATTERY; i++) {
+            b3.cells[i] = base3 + (i % 3) * 2;
+            if (b3.cells[i] < b3Min) b3Min = b3.cells[i];
+            if (b3.cells[i] > b3Max) b3Max = b3.cells[i];
+        }
+        b3.cellMin = b3Min;
+        b3.cellMax = b3Max;
+        b3.cellDiff = b3Max - b3Min;
+        b3.warningRaw = 0;
+
+        // Battery 4: Healthy pack in charge
+        BatteryPack& b4 = packs[3];
+        b4.isOnline = true;
+        b4.lastSeenMs = millis();
+        b4.voltage = 51.88f + (float)(random(-8, 8)) / 100.0f;
+        b4.current = 15.6f + (float)(random(-4, 4)) / 10.0f;
+        b4.soc = 77;
+        b4.soh = 100;
+        b4.tempPcb = 24;
+        b4.tempAvg = 23;
+        b4.tempMax = 25;
+        b4.statusName = "Charging";
+        b4.cycles = 28;
+        b4.balanceMask = 0;
+
+        uint16_t base4 = 3452 + random(-4, 4);
+        uint16_t b4Min = 5000, b4Max = 0;
+        for (int i = 0; i < CELLS_PER_BATTERY; i++) {
+            b4.cells[i] = base4 + (i % 2) * 3;
+            if (b4.cells[i] < b4Min) b4Min = b4.cells[i];
+            if (b4.cells[i] > b4Max) b4Max = b4.cells[i];
+        }
+        b4.cellMin = b4Min;
+        b4.cellMax = b4Max;
+        b4.cellDiff = b4Max - b4Min;
+        b4.warningRaw = 0;
+
         xSemaphoreGive(mutex);
     }
 }
