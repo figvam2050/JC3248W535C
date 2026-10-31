@@ -142,7 +142,7 @@ static void my_touchpad_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data
     }
 }
 
-// --- Pro Helper Card Styling ---
+// --- Helper Card Styling ---
 static void create_card_box(lv_obj_t *parent, lv_obj_t *&box, int w, int h) {
     box = lv_obj_create(parent);
     lv_obj_set_size(box, w, h);
@@ -157,7 +157,7 @@ static void create_card_box(lv_obj_t *parent, lv_obj_t *&box, int w, int h) {
 // --- Create Tab for a Battery Pack ---
 static void create_battery_tab(uint8_t pack_idx) {
     char tab_name[16];
-    snprintf(tab_name, sizeof(tab_name), "АКБ #%u", pack_idx + 1);
+    snprintf(tab_name, sizeof(tab_name), "Pack #%u", pack_idx + 1);
     
     lv_obj_t *tab = lv_tabview_add_tab(tabview, tab_name);
     lv_obj_set_style_bg_color(tab, lv_color_hex(COLOR_BG), 0);
@@ -166,24 +166,24 @@ static void create_battery_tab(uint8_t pack_idx) {
     PackUI &ui = g_pack_ui[pack_idx];
     ui.tab = tab;
 
-    // Header Card (Status, Delta, V, I, Pwr)
+    // Header Card
     lv_obj_t *header_card;
     create_card_box(tab, header_card, 308, 102);
     lv_obj_align(header_card, LV_ALIGN_TOP_MID, 0, 0);
 
     ui.lbl_status_pill = lv_label_create(header_card);
-    lv_label_set_text(ui.lbl_status_pill, "● ОЧІКУВАННЯ");
+    lv_label_set_text(ui.lbl_status_pill, "STANDBY");
     lv_obj_set_style_text_color(ui.lbl_status_pill, lv_color_hex(COLOR_GREEN), 0);
     lv_obj_set_style_text_font(ui.lbl_status_pill, &lv_font_montserrat_14, 0);
     lv_obj_align(ui.lbl_status_pill, LV_ALIGN_TOP_LEFT, 2, 0);
 
     ui.lbl_delta = lv_label_create(header_card);
-    lv_label_set_text(ui.lbl_delta, "Δ: -- mV");
+    lv_label_set_text(ui.lbl_delta, "Delta: -- mV");
     lv_obj_set_style_text_color(ui.lbl_delta, lv_color_hex(COLOR_AMBER), 0);
     lv_obj_set_style_text_font(ui.lbl_delta, &lv_font_montserrat_14, 0);
     lv_obj_align(ui.lbl_delta, LV_ALIGN_TOP_RIGHT, -2, 0);
 
-    // Big V & I & Pwr
+    // V, I, Pwr
     ui.lbl_voltage = lv_label_create(header_card);
     lv_label_set_text(ui.lbl_voltage, "51.20 V");
     lv_obj_set_style_text_color(ui.lbl_voltage, lv_color_hex(COLOR_ACCENT_BLUE), 0);
@@ -218,7 +218,7 @@ static void create_battery_tab(uint8_t pack_idx) {
 
     // Sub-bar Info (Temps)
     ui.lbl_temps = lv_label_create(tab);
-    lv_label_set_text(ui.lbl_temps, "PCB: 25°C · Avg: 24°C · Max: 25°C");
+    lv_label_set_text(ui.lbl_temps, "PCB: 25C | Avg: 24C | Max: 25C");
     lv_obj_set_style_text_color(ui.lbl_temps, lv_color_hex(COLOR_MUTED), 0);
     lv_obj_set_style_text_font(ui.lbl_temps, &lv_font_montserrat_12, 0);
     lv_obj_align(ui.lbl_temps, LV_ALIGN_TOP_LEFT, 8, 108);
@@ -236,7 +236,7 @@ static void create_battery_tab(uint8_t pack_idx) {
 
         lv_obj_t *c_lbl = lv_label_create(ui.cell_cards[i]);
         char c_text[20];
-        snprintf(c_text, sizeof(c_text), "C%02d: 3.300V", i + 1);
+        snprintf(c_text, sizeof(c_text), "C%02d: 3300", i + 1);
         lv_label_set_text(c_lbl, c_text);
         lv_obj_set_style_text_font(c_lbl, &lv_font_montserrat_12, 0);
         lv_obj_set_style_text_color(c_lbl, lv_color_white(), 0);
@@ -265,40 +265,40 @@ static void build_ui() {
     lv_obj_set_style_text_font(tab_btns, &lv_font_montserrat_14, 0);
 
     // === TAB 1: System Overview ===
-    tab_overview = lv_tabview_add_tab(tabview, "Огляд");
+    tab_overview = lv_tabview_add_tab(tabview, "Overview");
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(COLOR_BG), 0);
     lv_obj_set_style_pad_all(tab_overview, 6, 0);
 
-    // Top Navigation & IP Header
+    // Top Header
     lv_obj_t *title_card;
     create_card_box(tab_overview, title_card, 308, 44);
     lv_obj_align(title_card, LV_ALIGN_TOP_MID, 0, 0);
 
     lv_obj_t *title_lbl = lv_label_create(title_card);
-    lv_label_set_text(title_lbl, "⚡ VISION BMS MONITOR");
+    lv_label_set_text(title_lbl, "VISION BMS PRO");
     lv_obj_set_style_text_color(title_lbl, lv_color_hex(COLOR_ACCENT_BLUE), 0);
     lv_obj_set_style_text_font(title_lbl, &lv_font_montserrat_14, 0);
     lv_obj_align(title_lbl, LV_ALIGN_LEFT_MID, 2, 0);
 
     lbl_wifi_ip = lv_label_create(title_card);
-    lv_label_set_text(lbl_wifi_ip, "Wi-Fi: ...");
+    lv_label_set_text(lbl_wifi_ip, "IP: ...");
     lv_obj_set_style_text_color(lbl_wifi_ip, lv_color_hex(COLOR_GREEN), 0);
     lv_obj_set_style_text_font(lbl_wifi_ip, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_wifi_ip, LV_ALIGN_RIGHT_MID, -2, 0);
 
-    // Main Energy & Power Card
+    // Main Power Card
     lv_obj_t *pwr_card;
     create_card_box(tab_overview, pwr_card, 308, 136);
     lv_obj_align(pwr_card, LV_ALIGN_TOP_MID, 0, 50);
 
     lbl_sys_status_pill = lv_label_create(pwr_card);
-    lv_label_set_text(lbl_sys_status_pill, "● СТАН БАНКУ: В НОРМІ");
+    lv_label_set_text(lbl_sys_status_pill, "NORMAL OPERATION");
     lv_obj_set_style_text_color(lbl_sys_status_pill, lv_color_hex(COLOR_GREEN), 0);
     lv_obj_set_style_text_font(lbl_sys_status_pill, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_sys_status_pill, LV_ALIGN_TOP_LEFT, 4, 2);
 
     lbl_sys_power = lv_label_create(pwr_card);
-    lv_label_set_text(lbl_sys_power, "0.00 кВт");
+    lv_label_set_text(lbl_sys_power, "0.00 kW");
     lv_obj_set_style_text_color(lbl_sys_power, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_sys_power, &lv_font_montserrat_28, 0);
     lv_obj_align(lbl_sys_power, LV_ALIGN_LEFT_MID, 4, -12);
@@ -310,7 +310,7 @@ static void build_ui() {
     lv_obj_align(lbl_sys_voltage, LV_ALIGN_BOTTOM_LEFT, 4, -4);
 
     lbl_sys_current = lv_label_create(pwr_card);
-    lv_label_set_text(lbl_sys_current, "+0.0 А");
+    lv_label_set_text(lbl_sys_current, "+0.0 A");
     lv_obj_set_style_text_color(lbl_sys_current, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_sys_current, &lv_font_montserrat_20, 0);
     lv_obj_align(lbl_sys_current, LV_ALIGN_BOTTOM_RIGHT, -4, -4);
@@ -321,7 +321,7 @@ static void build_ui() {
     lv_obj_align(soc_card, LV_ALIGN_TOP_MID, 0, 192);
 
     lv_obj_t *soc_title = lv_label_create(soc_card);
-    lv_label_set_text(soc_title, "ЗАРЯД БАНКУ (SOC)");
+    lv_label_set_text(soc_title, "BANK STATE OF CHARGE");
     lv_obj_set_style_text_color(soc_title, lv_color_hex(COLOR_MUTED), 0);
     lv_obj_set_style_text_font(soc_title, &lv_font_montserrat_12, 0);
     lv_obj_align(soc_title, LV_ALIGN_TOP_LEFT, 4, 2);
@@ -346,31 +346,31 @@ static void build_ui() {
     lv_obj_align(diag_card, LV_ALIGN_TOP_MID, 0, 284);
 
     lbl_sys_packs = lv_label_create(diag_card);
-    lv_label_set_text(lbl_sys_packs, "Підключено: 2 АКБ (Демо)");
+    lv_label_set_text(lbl_sys_packs, "Packs Online: 2 (Demo)");
     lv_obj_set_style_text_color(lbl_sys_packs, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_sys_packs, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_sys_packs, LV_ALIGN_TOP_LEFT, 4, 2);
 
     lbl_sys_delta = lv_label_create(diag_card);
-    lv_label_set_text(lbl_sys_delta, "Розбаланс банку: Δ = 0 mV");
+    lv_label_set_text(lbl_sys_delta, "Bank Max Cell Delta: 0 mV");
     lv_obj_set_style_text_color(lbl_sys_delta, lv_color_hex(COLOR_AMBER), 0);
     lv_obj_set_style_text_font(lbl_sys_delta, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_sys_delta, LV_ALIGN_TOP_LEFT, 4, 28);
 
     lbl_sys_extremes = lv_label_create(diag_card);
-    lv_label_set_text(lbl_sys_extremes, "Min: 3.300V | Max: 3.300V");
+    lv_label_set_text(lbl_sys_extremes, "Min: 3.300 V | Max: 3.300 V");
     lv_obj_set_style_text_color(lbl_sys_extremes, lv_color_hex(COLOR_MUTED), 0);
     lv_obj_set_style_text_font(lbl_sys_extremes, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_sys_extremes, LV_ALIGN_TOP_LEFT, 4, 54);
 
     lbl_autonomy_eta = lv_label_create(diag_card);
-    lv_label_set_text(lbl_autonomy_eta, "Автономність: ~-- год -- хв");
+    lv_label_set_text(lbl_autonomy_eta, "Autonomy: ~-- h -- m");
     lv_obj_set_style_text_color(lbl_autonomy_eta, lv_color_hex(COLOR_ACCENT_BLUE), 0);
     lv_obj_set_style_text_font(lbl_autonomy_eta, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_autonomy_eta, LV_ALIGN_TOP_LEFT, 4, 78);
 
     lv_obj_t *sniff_mode_lbl = lv_label_create(diag_card);
-    lv_label_set_text(sniff_mode_lbl, "Шина RS485: RX GPIO 44 (Пасивний сніффер)");
+    lv_label_set_text(sniff_mode_lbl, "Sniffer Bus: RX GPIO 44 (Passive)");
     lv_obj_set_style_text_color(sniff_mode_lbl, lv_color_hex(COLOR_MUTED), 0);
     lv_obj_set_style_text_font(sniff_mode_lbl, &lv_font_montserrat_10, 0);
     lv_obj_align(sniff_mode_lbl, LV_ALIGN_BOTTOM_LEFT, 4, -2);
@@ -427,19 +427,19 @@ static void update_ui() {
 
     // Status Banner
     if (alarms) {
-        lv_label_set_text(lbl_sys_status_pill, "⚠️ ТРИВОГА / ПОПЕРЕДЖЕННЯ");
+        lv_label_set_text(lbl_sys_status_pill, "ALARM / WARNING");
         lv_obj_set_style_text_color(lbl_sys_status_pill, lv_color_hex(COLOR_RED), 0);
     } else if (anyBalancing) {
-        lv_label_set_text(lbl_sys_status_pill, "⚡ АКТИВНЕ БАЛАНСУВАННЯ");
+        lv_label_set_text(lbl_sys_status_pill, "ACTIVE BALANCING");
         lv_obj_set_style_text_color(lbl_sys_status_pill, lv_color_hex(COLOR_AMBER), 0);
     } else if (iSum > 0.5f) {
-        lv_label_set_text(lbl_sys_status_pill, "● ЗАРЯДЖАННЯ БАНКУ");
+        lv_label_set_text(lbl_sys_status_pill, "CHARGING BANK");
         lv_obj_set_style_text_color(lbl_sys_status_pill, lv_color_hex(COLOR_GREEN), 0);
     } else if (iSum < -0.5f) {
-        lv_label_set_text(lbl_sys_status_pill, "● РОЗРЯДЖАННЯ БАНКУ");
+        lv_label_set_text(lbl_sys_status_pill, "DISCHARGING BANK");
         lv_obj_set_style_text_color(lbl_sys_status_pill, lv_color_hex(COLOR_ACCENT_BLUE), 0);
     } else {
-        lv_label_set_text(lbl_sys_status_pill, "● СТАН БАНКУ: В НОРМІ");
+        lv_label_set_text(lbl_sys_status_pill, "NORMAL OPERATION");
         lv_obj_set_style_text_color(lbl_sys_status_pill, lv_color_hex(COLOR_GREEN), 0);
     }
 
@@ -448,24 +448,24 @@ static void update_ui() {
     snprintf(buf, sizeof(buf), "%.2f V", avgVolt);
     lv_label_set_text(lbl_sys_voltage, buf);
 
-    snprintf(buf, sizeof(buf), "%+.1f А", iSum);
+    snprintf(buf, sizeof(buf), "%+.1f A", iSum);
     lv_label_set_text(lbl_sys_current, buf);
 
-    snprintf(buf, sizeof(buf), "%.2f кВт", totalPwrKw);
+    snprintf(buf, sizeof(buf), "%.2f kW", totalPwrKw);
     lv_label_set_text(lbl_sys_power, buf);
 
     snprintf(buf, sizeof(buf), "%.0f%%", avgSoc);
     lv_label_set_text(lbl_sys_soc, buf);
     lv_bar_set_value(bar_sys_soc, (int32_t)avgSoc, LV_ANIM_ON);
 
-    snprintf(buf, sizeof(buf), "Підключено: %u АКБ (%s)", count, Sniffer.demoMode ? "Демо" : "RS485");
+    snprintf(buf, sizeof(buf), "Packs Online: %u (%s)", count, Sniffer.demoMode ? "Demo" : "RS485");
     lv_label_set_text(lbl_sys_packs, buf);
 
-    snprintf(buf, sizeof(buf), "Розбаланс банку: Δ = %u mV", globalDeltaMv);
+    snprintf(buf, sizeof(buf), "Bank Max Delta: %u mV", globalDeltaMv);
     lv_label_set_text(lbl_sys_delta, buf);
 
     if (count > 0 && gMax >= gMin) {
-        snprintf(buf, sizeof(buf), "Min: %.3f V · Max: %.3f V", gMin / 1000.0f, gMax / 1000.0f);
+        snprintf(buf, sizeof(buf), "Min: %.3f V | Max: %.3f V", gMin / 1000.0f, gMax / 1000.0f);
         lv_label_set_text(lbl_sys_extremes, buf);
     }
 
@@ -474,12 +474,12 @@ static void update_ui() {
     if (iSum > 0.5f) {
         float rem = (count * 100.0f) - sumCap;
         float h = rem / iSum;
-        snprintf(buf, sizeof(buf), "Час до 100%%: ~%u год %02u хв", (int)h, (int)((h - (int)h) * 60));
+        snprintf(buf, sizeof(buf), "ETA to 100%%: ~%u h %02u m", (int)h, (int)((h - (int)h) * 60));
     } else if (iSum < -0.5f) {
         float h = sumCap / fabsf(iSum);
-        snprintf(buf, sizeof(buf), "Автономність: ~%u год %02u хв", (int)h, (int)((h - (int)h) * 60));
+        snprintf(buf, sizeof(buf), "Autonomy: ~%u h %02u m", (int)h, (int)((h - (int)h) * 60));
     } else {
-        snprintf(buf, sizeof(buf), "Стендбай / буферний режим");
+        snprintf(buf, sizeof(buf), "Standby / Buffer Mode");
     }
     lv_label_set_text(lbl_autonomy_eta, buf);
 
@@ -496,19 +496,19 @@ static void update_ui() {
 
         // Status pill
         if (p.warningRaw || p.protectionRaw || p.errorRaw) {
-            lv_label_set_text(ui.lbl_status_pill, "⚠️ АВАРІЯ / ЗАХИСТ");
+            lv_label_set_text(ui.lbl_status_pill, "ALARM / WARNING");
             lv_obj_set_style_text_color(ui.lbl_status_pill, lv_color_hex(COLOR_RED), 0);
         } else if (p.balanceMask != 0) {
-            lv_label_set_text(ui.lbl_status_pill, "⚡ БАЛАНСУВАННЯ");
+            lv_label_set_text(ui.lbl_status_pill, "BALANCING");
             lv_obj_set_style_text_color(ui.lbl_status_pill, lv_color_hex(COLOR_AMBER), 0);
         } else if (p.current > 0.5f) {
-            lv_label_set_text(ui.lbl_status_pill, "● ЗАРЯДЖАННЯ");
+            lv_label_set_text(ui.lbl_status_pill, "CHARGING");
             lv_obj_set_style_text_color(ui.lbl_status_pill, lv_color_hex(COLOR_GREEN), 0);
         } else if (p.current < -0.5f) {
-            lv_label_set_text(ui.lbl_status_pill, "● РОЗРЯДЖАННЯ");
+            lv_label_set_text(ui.lbl_status_pill, "DISCHARGING");
             lv_obj_set_style_text_color(ui.lbl_status_pill, lv_color_hex(COLOR_ACCENT_BLUE), 0);
         } else {
-            lv_label_set_text(ui.lbl_status_pill, "● ОЧІКУВАННЯ");
+            lv_label_set_text(ui.lbl_status_pill, "STANDBY");
             lv_obj_set_style_text_color(ui.lbl_status_pill, lv_color_hex(COLOR_MUTED), 0);
         }
 
@@ -516,10 +516,10 @@ static void update_ui() {
         snprintf(buf, sizeof(buf), "%.2f V", p.voltage);
         lv_label_set_text(ui.lbl_voltage, buf);
 
-        snprintf(buf, sizeof(buf), "%+.1f А", p.current);
+        snprintf(buf, sizeof(buf), "%+.1f A", p.current);
         lv_label_set_text(ui.lbl_current, buf);
 
-        snprintf(buf, sizeof(buf), "%.0f Вт", p.voltage * p.current);
+        snprintf(buf, sizeof(buf), "%.0f W", p.voltage * p.current);
         lv_label_set_text(ui.lbl_power, buf);
 
         // SoC
@@ -528,11 +528,11 @@ static void update_ui() {
         lv_bar_set_value(ui.bar_soc, p.soc, LV_ANIM_OFF);
 
         // Delta
-        snprintf(buf, sizeof(buf), "Δ: %u mV", p.cellDiff);
+        snprintf(buf, sizeof(buf), "Delta: %u mV", p.cellDiff);
         lv_label_set_text(ui.lbl_delta, buf);
 
         // Temps
-        snprintf(buf, sizeof(buf), "PCB: %d°C · Avg: %d°C · Max: %d°C", p.tempPcb, p.tempAvg, p.tempMax);
+        snprintf(buf, sizeof(buf), "PCB: %dC | Avg: %dC | Max: %dC", p.tempPcb, p.tempAvg, p.tempMax);
         lv_label_set_text(ui.lbl_temps, buf);
 
         // 15 Cells with pro styling
