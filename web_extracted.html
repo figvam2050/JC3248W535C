@@ -1040,7 +1040,7 @@ function renderPackDetail(addr) {
     if (mv === d.cell_max) cls += ' max';
     const balOn = d.balance_bits && d.balance_bits[i] && d.balance_bits[i].on;
     if (balOn) cls += ' bal-active';
-    const rVal = rints[i] ? rints[i] + ' mΩ' : '';
+    const rVal = (rints[i] != null && rints[i] > 0) ? (Number(rints[i]).toFixed(2) + ' mΩ') : '';
     return `<div class="${cls}">
       <div class="n">#${i + 1}${balOn ? ' <span class="b-tag">BAL</span>' : ''}</div>
       <div class="mv" title="${mv} mV">${(mv / 1000).toFixed(3)} V</div>
@@ -1070,8 +1070,10 @@ function renderPackDetail(addr) {
   leds(document.getElementById('p_prot'), d.protection_bits, 'on');
   leds(document.getElementById('p_errbits'), d.error_bits, 'onw');
 
-  document.getElementById('p_bal').innerHTML = d.balance_bits ? d.balance_bits.map(b =>
-    `<span class="${b.on ? 'on' : ''}">${b.n}</span>`).join('') : '—';
+  document.getElementById('p_bal').innerHTML = d.balance_bits ? d.balance_bits.map(b => {
+    const num = b.n != null ? b.n : (b.cell != null ? b.cell : '?');
+    return `<span class="${b.on ? 'on' : ''}" title="Комірка #${num}: ${b.on ? 'АКТИВНЕ БАЛАНСУВАННЯ' : 'не активне'}">${num}</span>`;
+  }).join('') : '—';
 }
 
 /* --- CANVAS CHART 1: ROLLING HISTORY (VOLTAGE & CURRENT) --- */
@@ -1358,7 +1360,7 @@ function drawCellBarChart(addr) {
     // R_int label under bar
     if (rints[i] > 0) {
       ctx.fillStyle = '#58a6ff';
-      ctx.fillText(rints[i] + 'mΩ', x + barW / 2, h - 8);
+      ctx.fillText(Number(rints[i]).toFixed(2) + 'mΩ', x + barW / 2, h - 8);
     }
 
     // BAL badge text on top

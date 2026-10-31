@@ -181,7 +181,7 @@ void WebGateway::setupRoutes() {
 
     // Provide complete snapshot compatible with COMBOX frontend
     _server->on("/api/data", HTTP_GET, [this](AsyncWebServerRequest *request){
-        DynamicJsonDocument doc(8192);
+        DynamicJsonDocument doc(16384);
 
         doc["mode"] = "passive";
         doc["demo"] = Sniffer.demoMode;
@@ -246,6 +246,7 @@ void WebGateway::setupRoutes() {
                     parsed["protection"] = _packs[i].protectionRaw;
                     parsed["error_code"] = _packs[i].errorRaw;
                     parsed["balance"] = _packs[i].balanceMask;
+                    parsed["cell_num"] = CELLS_PER_BATTERY;
                     parsed["model"] = "Vision V-LFP48100";
                     parsed["fw_version"] = "v2.01";
                     parsed["serial"] = "VS-2024-LFP";
@@ -290,10 +291,11 @@ void WebGateway::setupRoutes() {
                         }
                     }
 
-                    // Simulated R_int (mOhm)
+                    // Simulated R_int (mOhm, rounded to 2 decimals)
                     JsonArray rintArr = p.createNestedArray("rint");
                     for (int c = 0; c < CELLS_PER_BATTERY; c++) {
-                        rintArr.add(0.42f + ((c % 3) * 0.05f));
+                        float rVal = round((0.42f + ((c % 3) * 0.05f)) * 100.0f) / 100.0f;
+                        rintArr.add(rVal);
                     }
                 }
             }
@@ -367,6 +369,7 @@ void WebGateway::setupRoutes() {
             JsonObject hp = histArr.createNestedObject();
             hp["v"] = s_history[k].v;
             hp["i"] = s_history[k].i;
+            hp["diff"] = s_history[k].delta;
             hp["delta"] = s_history[k].delta;
         }
 
