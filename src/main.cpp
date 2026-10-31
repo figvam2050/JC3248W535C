@@ -480,7 +480,8 @@ static void update_ui() {
 void sniffer_task(void *pvParameters) {
     while (true) {
         Sniffer.update(g_packs, dataMutex);
-        vTaskDelay(pdMS_TO_TICKS(20));
+        Gateway.loop();
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
