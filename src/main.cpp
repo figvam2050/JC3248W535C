@@ -150,6 +150,7 @@ static ScreenSleepMode s_sleep_mode = SLEEP_MODE_SAVER;
 
 // Fullscreen Screensaver Overlay
 static lv_obj_t *screensaver_overlay = NULL;
+static lv_obj_t *screensaver_cluster = NULL;
 static lv_obj_t *lbl_ss_time = NULL;
 static lv_obj_t *lbl_ss_soc = NULL;
 static lv_obj_t *lbl_ss_pwr = NULL;
@@ -1318,33 +1319,43 @@ static void build_ui() {
         BmsAudio.playClick();
     }, LV_EVENT_CLICKED, NULL);
 
-    // Large Night Clock (Centered, 48px font - 2x bigger!)
-    lbl_ss_time = lv_label_create(screensaver_overlay);
+    // Screensaver floating cluster container (can roam across the whole 320x480 screen!)
+    screensaver_cluster = lv_obj_create(screensaver_overlay);
+    lv_obj_set_size(screensaver_cluster, 260, 200);
+    lv_obj_set_pos(screensaver_cluster, 30, 120);
+    lv_obj_set_style_bg_opa(screensaver_cluster, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(screensaver_cluster, 0, 0);
+    lv_obj_set_style_pad_all(screensaver_cluster, 0, 0);
+    lv_obj_clear_flag(screensaver_cluster, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(screensaver_cluster, LV_OBJ_FLAG_EVENT_BUBBLE); // touch passes through
+
+    // Large Night Clock (48px font)
+    lbl_ss_time = lv_label_create(screensaver_cluster);
     lv_label_set_text(lbl_ss_time, "12:00");
     lv_obj_set_style_text_color(lbl_ss_time, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_ss_time, &lv_font_montserrat_48, 0);
-    lv_obj_align(lbl_ss_time, LV_ALIGN_CENTER, 0, -50);
+    lv_obj_align(lbl_ss_time, LV_ALIGN_TOP_MID, 0, 0);
 
-    // Battery SOC Glance (Enhanced 18px font)
-    lbl_ss_soc = lv_label_create(screensaver_overlay);
+    // Battery SOC Glance (18px font)
+    lbl_ss_soc = lv_label_create(screensaver_cluster);
     lv_label_set_text(lbl_ss_soc, LV_SYMBOL_BATTERY_FULL " 100% (51.8V)");
     lv_obj_set_style_text_color(lbl_ss_soc, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(lbl_ss_soc, &lv_font_montserrat_18, 0);
-    lv_obj_align(lbl_ss_soc, LV_ALIGN_CENTER, 0, 16);
+    lv_obj_align(lbl_ss_soc, LV_ALIGN_TOP_MID, 0, 68);
 
-    // Power Glance (Enhanced 16px font)
-    lbl_ss_pwr = lv_label_create(screensaver_overlay);
+    // Power Glance (16px font)
+    lbl_ss_pwr = lv_label_create(screensaver_cluster);
     lv_label_set_text(lbl_ss_pwr, "0.00 kW");
     lv_obj_set_style_text_color(lbl_ss_pwr, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_ss_pwr, &lv_font_montserrat_16, 0);
-    lv_obj_align(lbl_ss_pwr, LV_ALIGN_CENTER, 0, 48);
+    lv_obj_align(lbl_ss_pwr, LV_ALIGN_TOP_MID, 0, 102);
 
-    // Grid Status Glance (Enhanced 14px font)
-    lbl_ss_grid = lv_label_create(screensaver_overlay);
+    // Grid Status Glance (14px font)
+    lbl_ss_grid = lv_label_create(screensaver_cluster);
     lv_label_set_text(lbl_ss_grid, LV_SYMBOL_CHARGE " 230V GRID ON");
     lv_obj_set_style_text_color(lbl_ss_grid, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(lbl_ss_grid, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_ss_grid, LV_ALIGN_CENTER, 0, 80);
+    lv_obj_align(lbl_ss_grid, LV_ALIGN_TOP_MID, 0, 134);
 
     // Hint at bottom
     lv_obj_t *lbl_ss_hint = lv_label_create(screensaver_overlay);
@@ -1975,7 +1986,7 @@ void loop() {
         }
     }
 
-    // Screensaver periodic burn-in shift & live time update
+    // Screensaver periodic floating/roaming & live time update
     if (s_is_screen_dimmed && s_sleep_mode == SLEEP_MODE_SAVER && screensaver_overlay) {
         static uint32_t last_ss_tick = 0;
         if (millis() - last_ss_tick >= 1000) {
@@ -1995,12 +2006,14 @@ void loop() {
             }
             lv_label_set_text(lbl_ss_time, tBuf);
 
-            // Subtle burn-in protection shift every 30 seconds
+            // Dynamic random roaming motion across the screen every 10 seconds!
             s_ss_burnin_step++;
-            if ((s_ss_burnin_step % 30) == 0) {
-                int shift_x = (s_ss_burnin_step % 60 == 0) ? 12 : -12;
-                int shift_y = (s_ss_burnin_step % 90 == 0) ? -32 : -44;
-                lv_obj_align(lbl_ss_time, LV_ALIGN_CENTER, shift_x, shift_y);
+            if ((s_ss_burnin_step % 10) == 0 && screensaver_cluster) {
+                // Screen is 320x480. Cluster is 260x200.
+                // Random X in range [8 .. 52], Random Y in range [20 .. 250]
+                int rand_x = 8 + (esp_random() % 45);
+                int rand_y = 20 + (esp_random() % 230);
+                lv_obj_set_pos(screensaver_cluster, rand_x, rand_y);
             }
         }
     }
