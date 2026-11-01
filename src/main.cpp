@@ -106,6 +106,9 @@ static lv_obj_t *lbl_alarm_details = NULL;
 // SD Rec Button Widgets on Overview
 static lv_obj_t *btn_bank_log = NULL;
 static lv_obj_t *lbl_bank_log = NULL;
+
+// Top Header Widgets (Fixed on top of screen)
+static lv_obj_t *lbl_top_power_src = NULL;
 static lv_obj_t *lbl_top_ip = NULL;
 
 // Dedicated Logs Tab Widgets
@@ -595,28 +598,77 @@ static void build_ui() {
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_overview, 6, 0);
 
-    // 1. Status Bar Header
-    lv_obj_t *top_bar = create_glass_card(tab_overview, 308, 38);
-    lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
+    // Create Dedicated Logs Tab immediately after All so it is Tab 1
+    create_logs_tab();
 
-    lbl_mode_pill = lv_label_create(top_bar);
-    lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " NORMAL OPERATION");
-    lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_mode_pill, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_mode_pill, LV_ALIGN_LEFT_MID, 4, 0);
+    // System Status Bar (Fixed on top of tabview header)
+    lv_obj_t *top_status_bar = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(top_status_bar, 180, 32);
+    lv_obj_align(top_status_bar, LV_ALIGN_TOP_RIGHT, -4, 1);
+    lv_obj_set_style_bg_opa(top_status_bar, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(top_status_bar, 0, 0);
+    lv_obj_set_style_pad_all(top_status_bar, 0, 0);
+    lv_obj_clear_flag(top_status_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    lbl_top_ip = lv_label_create(top_bar);
-    lv_label_set_text(lbl_top_ip, "IP: ...");
+    lbl_top_power_src = lv_label_create(top_status_bar);
+    lv_label_set_text(lbl_top_power_src, LV_SYMBOL_USB " USB");
+    lv_obj_set_style_text_color(lbl_top_power_src, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_top_power_src, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_top_power_src, LV_ALIGN_RIGHT_MID, 0, 0);
+
+    lbl_top_ip = lv_label_create(top_status_bar);
+    lv_label_set_text(lbl_top_ip, LV_SYMBOL_WIFI " ...");
     lv_obj_set_style_text_color(lbl_top_ip, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -4, 0);
+    lv_obj_align_to(lbl_top_ip, lbl_top_power_src, LV_ALIGN_OUT_LEFT_MID, -8, 0);
 
-    // 2. Central Gauge Card
-    lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 168);
-    lv_obj_align(gauge_card, LV_ALIGN_TOP_MID, 0, 42);
+    // 1. Pack Selector Quick Strip Card (4 Active Buttons at Top)
+    lv_obj_t *pack_strip_card = create_glass_card(tab_overview, 308, 48);
+    lv_obj_align(pack_strip_card, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_pad_all(pack_strip_card, 2, 0);
+
+    for (int i = 0; i < 4; i++) {
+        pack_strip_btns[i] = lv_btn_create(pack_strip_card);
+        lv_obj_set_size(pack_strip_btns[i], 72, 40);
+        lv_obj_set_pos(pack_strip_btns[i], 2 + i * 76, 2);
+        lv_obj_set_style_bg_color(pack_strip_btns[i], lv_color_hex(CLR_PANEL_INNER), 0);
+        lv_obj_set_style_border_color(pack_strip_btns[i], lv_color_hex(CLR_BORDER), 0);
+        lv_obj_set_style_border_width(pack_strip_btns[i], 1, 0);
+        lv_obj_set_style_radius(pack_strip_btns[i], 8, 0);
+        lv_obj_set_style_pad_all(pack_strip_btns[i], 2, 0);
+        lv_obj_add_event_cb(pack_strip_btns[i], pack_strip_click_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)i);
+
+        pack_strip_lbls[i] = lv_label_create(pack_strip_btns[i]);
+        char pName[12];
+        snprintf(pName, sizeof(pName), "P%02d --%%", i + 1);
+        lv_label_set_text(pack_strip_lbls[i], pName);
+        lv_obj_set_style_text_color(pack_strip_lbls[i], lv_color_hex(CLR_TEXT_MUTED), 0);
+        lv_obj_set_style_text_font(pack_strip_lbls[i], &lv_font_montserrat_12, 0);
+        lv_obj_align(pack_strip_lbls[i], LV_ALIGN_TOP_MID, 0, 2);
+
+        pack_strip_bars[i] = lv_bar_create(pack_strip_btns[i]);
+        lv_obj_set_size(pack_strip_bars[i], 62, 5);
+        lv_obj_align(pack_strip_bars[i], LV_ALIGN_BOTTOM_MID, 0, -2);
+        lv_bar_set_range(pack_strip_bars[i], 0, 100);
+        lv_bar_set_value(pack_strip_bars[i], 0, LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(pack_strip_bars[i], lv_color_hex(0x1E293B), 0);
+        lv_obj_set_style_bg_color(pack_strip_bars[i], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
+        lv_obj_set_style_radius(pack_strip_bars[i], 2, 0);
+        lv_obj_set_style_radius(pack_strip_bars[i], 2, LV_PART_INDICATOR);
+    }
+
+    // 2. Central Gauge Card (Power & SOC)
+    lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 160);
+    lv_obj_align(gauge_card, LV_ALIGN_TOP_MID, 0, 52);
+
+    lbl_mode_pill = lv_label_create(gauge_card);
+    lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " NORMAL OPERATION");
+    lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_mode_pill, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_mode_pill, LV_ALIGN_TOP_LEFT, 2, 0);
 
     arc_soc = lv_arc_create(gauge_card);
-    lv_obj_set_size(arc_soc, 146, 146);
+    lv_obj_set_size(arc_soc, 136, 136);
     lv_arc_set_rotation(arc_soc, 135);
     lv_arc_set_bg_angles(arc_soc, 0, 270);
     lv_arc_set_range(arc_soc, 0, 100);
@@ -627,7 +679,7 @@ static void build_ui() {
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_PANEL_INNER), LV_PART_MAIN);
     lv_obj_set_style_arc_width(arc_soc, 12, LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
-    lv_obj_align(arc_soc, LV_ALIGN_LEFT_MID, -2, 0);
+    lv_obj_align(arc_soc, LV_ALIGN_LEFT_MID, -4, 6);
 
     lbl_soc_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_soc_val, "75%");
@@ -639,19 +691,19 @@ static void build_ui() {
     lv_label_set_text(lbl_soc_sub, "STATE OF CHARGE");
     lv_obj_set_style_text_color(lbl_soc_sub, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_soc_sub, &lv_font_montserrat_10, 0);
-    lv_obj_align_to(lbl_soc_sub, arc_soc, LV_ALIGN_CENTER, 0, 18);
+    lv_obj_align_to(lbl_soc_sub, arc_soc, LV_ALIGN_CENTER, 0, 16);
 
     lv_obj_t *lbl_pwr_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_pwr_title, "ACTIVE POWER");
     lv_obj_set_style_text_color(lbl_pwr_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_pwr_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -6, 10);
+    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -6, 12);
 
     lbl_power_kw = lv_label_create(gauge_card);
     lv_label_set_text(lbl_power_kw, "1.55 kW");
     lv_obj_set_style_text_color(lbl_power_kw, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_power_kw, &lv_font_montserrat_24, 0);
-    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -6, 24);
+    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -6, 26);
 
     lv_obj_t *lbl_v_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_v_title, "VOLTAGE");
@@ -679,7 +731,7 @@ static void build_ui() {
 
     // 3. Dynamic Alarm Banner
     card_alarm_banner = create_glass_card(tab_overview, 308, 48);
-    lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 214);
+    lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 216);
     lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0);
     lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_clear_flag(card_alarm_banner, LV_OBJ_FLAG_SCROLLABLE);
@@ -704,7 +756,7 @@ static void build_ui() {
 
     // 4. Bank Health & Delta Card
     lv_obj_t *health_card = create_glass_card(tab_overview, 308, 86);
-    lv_obj_align(health_card, LV_ALIGN_TOP_MID, 0, 264);
+    lv_obj_align(health_card, LV_ALIGN_TOP_MID, 0, 268);
 
     lv_obj_t *h_title = lv_label_create(health_card);
     lv_label_set_text(h_title, "BANK CELL BALANCE (DELTA)");
@@ -734,13 +786,14 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_delta_extremes, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_delta_extremes, LV_ALIGN_BOTTOM_LEFT, 2, -2);
 
-    // 5. Interactive REC Button Card on Overview
-    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 86);
-    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 352);
+    // 5. Clean SD Log Card at Bottom
+    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 48);
+    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 358);
+    lv_obj_set_style_pad_all(info_card, 4, 0);
 
     btn_bank_log = lv_btn_create(info_card);
-    lv_obj_set_size(btn_bank_log, 292, 34);
-    lv_obj_align(btn_bank_log, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_size(btn_bank_log, 298, 38);
+    lv_obj_align(btn_bank_log, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_bank_log, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(btn_bank_log, 1, 0);
@@ -752,40 +805,6 @@ static void build_ui() {
     lv_obj_set_style_text_color(lbl_bank_log, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_bank_log, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_bank_log, LV_ALIGN_CENTER, 0, 0);
-
-    // V2 Pack Selector Strip (4 Quick Buttons)
-    for (int i = 0; i < 4; i++) {
-        pack_strip_btns[i] = lv_btn_create(info_card);
-        lv_obj_set_size(pack_strip_btns[i], 68, 36);
-        lv_obj_set_pos(pack_strip_btns[i], 2 + i * 72, 38);
-        lv_obj_set_style_bg_color(pack_strip_btns[i], lv_color_hex(CLR_PANEL_INNER), 0);
-        lv_obj_set_style_border_color(pack_strip_btns[i], lv_color_hex(CLR_BORDER), 0);
-        lv_obj_set_style_border_width(pack_strip_btns[i], 1, 0);
-        lv_obj_set_style_radius(pack_strip_btns[i], 8, 0);
-        lv_obj_set_style_pad_all(pack_strip_btns[i], 2, 0);
-        lv_obj_add_event_cb(pack_strip_btns[i], pack_strip_click_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)i);
-
-        pack_strip_lbls[i] = lv_label_create(pack_strip_btns[i]);
-        char pName[12];
-        snprintf(pName, sizeof(pName), "P%02d --%%", i + 1);
-        lv_label_set_text(pack_strip_lbls[i], pName);
-        lv_obj_set_style_text_color(pack_strip_lbls[i], lv_color_hex(CLR_TEXT_MUTED), 0);
-        lv_obj_set_style_text_font(pack_strip_lbls[i], &lv_font_montserrat_10, 0);
-        lv_obj_align(pack_strip_lbls[i], LV_ALIGN_TOP_MID, 0, 1);
-
-        pack_strip_bars[i] = lv_bar_create(pack_strip_btns[i]);
-        lv_obj_set_size(pack_strip_bars[i], 60, 5);
-        lv_obj_align(pack_strip_bars[i], LV_ALIGN_BOTTOM_MID, 0, -2);
-        lv_bar_set_range(pack_strip_bars[i], 0, 100);
-        lv_bar_set_value(pack_strip_bars[i], 0, LV_ANIM_OFF);
-        lv_obj_set_style_bg_color(pack_strip_bars[i], lv_color_hex(0x1E293B), 0);
-        lv_obj_set_style_bg_color(pack_strip_bars[i], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
-        lv_obj_set_style_radius(pack_strip_bars[i], 2, 0);
-        lv_obj_set_style_radius(pack_strip_bars[i], 2, LV_PART_INDICATOR);
-    }
-
-    // Create Dedicated Logs Tab
-    create_logs_tab();
 }
 
 static void update_ui() {
@@ -864,13 +883,16 @@ static void update_ui() {
 
     if (Gateway.isConnected()) {
         char ip_str[36];
-        snprintf(ip_str, sizeof(ip_str), "%s (%d dBm)", Gateway.getIpAddress().c_str(), Gateway.getRssi());
+        snprintf(ip_str, sizeof(ip_str), "%s %d dBm", Gateway.getIpAddress().c_str(), Gateway.getRssi());
         lv_label_set_text(lbl_top_ip, ip_str);
     } else if (Gateway.isAPMode()) {
-        lv_label_set_text(lbl_top_ip, "AP: 192.168.4.1");
+        lv_label_set_text(lbl_top_ip, "192.168.4.1 (AP)");
     } else {
         lv_label_set_text(lbl_top_ip, "Wi-Fi: ...");
     }
+
+    // Power source indication (default USB; ready for Battery ADC)
+    lv_label_set_text(lbl_top_power_src, LV_SYMBOL_USB " USB");
 
     if (alarms) {
         lv_label_set_text(lbl_mode_pill, LV_SYMBOL_WARNING " ALARM DETECTED");
