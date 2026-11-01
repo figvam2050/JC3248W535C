@@ -1318,33 +1318,33 @@ static void build_ui() {
         BmsAudio.playClick();
     }, LV_EVENT_CLICKED, NULL);
 
-    // Large Night Clock (Centered)
+    // Large Night Clock (Centered, 48px font - 2x bigger!)
     lbl_ss_time = lv_label_create(screensaver_overlay);
     lv_label_set_text(lbl_ss_time, "12:00");
     lv_obj_set_style_text_color(lbl_ss_time, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_ss_time, &lv_font_montserrat_24, 0);
-    lv_obj_align(lbl_ss_time, LV_ALIGN_CENTER, 0, -40);
+    lv_obj_set_style_text_font(lbl_ss_time, &lv_font_montserrat_48, 0);
+    lv_obj_align(lbl_ss_time, LV_ALIGN_CENTER, 0, -50);
 
-    // Battery SOC Glance
+    // Battery SOC Glance (Enhanced 18px font)
     lbl_ss_soc = lv_label_create(screensaver_overlay);
     lv_label_set_text(lbl_ss_soc, LV_SYMBOL_BATTERY_FULL " 100% (51.8V)");
     lv_obj_set_style_text_color(lbl_ss_soc, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_ss_soc, &lv_font_montserrat_16, 0);
-    lv_obj_align(lbl_ss_soc, LV_ALIGN_CENTER, 0, 8);
+    lv_obj_set_style_text_font(lbl_ss_soc, &lv_font_montserrat_18, 0);
+    lv_obj_align(lbl_ss_soc, LV_ALIGN_CENTER, 0, 16);
 
-    // Power Glance
+    // Power Glance (Enhanced 16px font)
     lbl_ss_pwr = lv_label_create(screensaver_overlay);
     lv_label_set_text(lbl_ss_pwr, "0.00 kW");
     lv_obj_set_style_text_color(lbl_ss_pwr, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_ss_pwr, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_ss_pwr, LV_ALIGN_CENTER, 0, 36);
+    lv_obj_set_style_text_font(lbl_ss_pwr, &lv_font_montserrat_16, 0);
+    lv_obj_align(lbl_ss_pwr, LV_ALIGN_CENTER, 0, 48);
 
-    // Grid Status Glance
+    // Grid Status Glance (Enhanced 14px font)
     lbl_ss_grid = lv_label_create(screensaver_overlay);
     lv_label_set_text(lbl_ss_grid, LV_SYMBOL_CHARGE " 230V GRID ON");
     lv_obj_set_style_text_color(lbl_ss_grid, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_ss_grid, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_ss_grid, LV_ALIGN_CENTER, 0, 68);
+    lv_obj_set_style_text_font(lbl_ss_grid, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_ss_grid, LV_ALIGN_CENTER, 0, 80);
 
     // Hint at bottom
     lv_obj_t *lbl_ss_hint = lv_label_create(screensaver_overlay);
