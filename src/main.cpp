@@ -1318,82 +1318,111 @@ static void update_ui() {
     const char* arrow_anim_rev[3] = {"< -", "< --", "<<-"};
 
     if (box_grid && box_inv && box_home && box_bat) {
-        if (iSum > 0.5f) {
-            // Charging: Grid -> Inverter -> Battery & Home
+        // 1. Grid Logic (Simulation / Detection)
+        // If battery is charging, grid is 100% supplying power.
+        // If battery is discharging, system is running off-grid (outage).
+        // If standby: grid is available if voltage/soc is full.
+        bool gridAvailable = (iSum > -0.5f);
+
+        if (gridAvailable) {
             lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_EMERALD), 0);
             lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_EMERALD), 0);
             lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_EMERALD), 0);
-
-            lv_obj_set_style_border_color(box_inv, lv_color_hex(CLR_EMERALD), 0);
-            lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(CLR_EMERALD), 0);
-            lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(CLR_EMERALD), 0);
-
-            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_EMERALD), 0);
-            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_EMERALD), 0);
-            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_EMERALD), 0);
-
-            lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_BORDER), 0);
-            lv_obj_set_style_text_color(lbl_home_icon, lv_color_white(), 0);
-            lv_obj_set_style_text_color(lbl_home_txt, lv_color_white(), 0);
+            lv_label_set_text(lbl_grid_txt, "230V ON");
 
             lv_label_set_text(lbl_flow_arrow_grid, arrow_anim_fwd[s_flow_anim_step]);
             lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_EMERALD), 0);
-
-            lv_label_set_text(lbl_flow_arrow_bat, arrow_anim_rev[s_flow_anim_step]); // Inv -> Bat
-            lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_EMERALD), 0);
-
-            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]); // Inv -> Home
-            lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_EMERALD), 0);
-        } else if (iSum < -0.5f) {
-            // Discharging: Battery -> Inverter -> Home (Off-grid / Outage)
-            lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_BORDER), 0);
-            lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_TEXT_MUTED), 0);
-            lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_TEXT_MUTED), 0);
-
-            lv_obj_set_style_border_color(box_inv, lv_color_hex(CLR_BLUE), 0);
-            lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(CLR_BLUE), 0);
-            lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(CLR_BLUE), 0);
-
-            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_BLUE), 0);
-            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_BLUE), 0);
-            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_BLUE), 0);
-
-            lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_CYAN), 0);
-            lv_obj_set_style_text_color(lbl_home_icon, lv_color_hex(CLR_CYAN), 0);
-            lv_obj_set_style_text_color(lbl_home_txt, lv_color_hex(CLR_CYAN), 0);
+        } else {
+            // Outage / Blackout
+            lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_ROSE), 0);
+            lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_ROSE), 0);
+            lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_ROSE), 0);
+            lv_label_set_text(lbl_grid_txt, "NO GRID");
 
             lv_label_set_text(lbl_flow_arrow_grid, "x");
             lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
+        }
+
+        // 2. Battery Logic
+        if (alarms) {
+            // Battery in Alarm
+            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_ROSE), 0);
+            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_ROSE), 0);
+            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_ROSE), 0);
+            lv_label_set_text(lbl_bat_txt, "ALARM");
+        } else if (iSum > 0.5f) {
+            // Charging: Yellow / Golden Amber
+            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_AMBER), 0);
+            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_AMBER), 0);
+            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_AMBER), 0);
+            lv_label_set_text(lbl_bat_txt, "CHARGE");
+
+            lv_label_set_text(lbl_flow_arrow_bat, arrow_anim_rev[s_flow_anim_step]); // Inv -> Bat
+            lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_AMBER), 0);
+        } else if (iSum < -0.5f) {
+            // Discharging: Sky Blue / Cyan (or Rose if SOC < 20%)
+            uint32_t batColor = (avgSoc < 20.0f) ? CLR_ROSE : CLR_BLUE;
+            lv_obj_set_style_border_color(box_bat, lv_color_hex(batColor), 0);
+            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(batColor), 0);
+            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(batColor), 0);
+            lv_label_set_text(lbl_bat_txt, "DISCHARGE");
 
             lv_label_set_text(lbl_flow_arrow_bat, arrow_anim_fwd[s_flow_anim_step]); // Bat -> Inv
-            lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_CYAN), 0);
-
-            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]); // Inv -> Home
-            lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_CYAN), 0);
+            lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(batColor), 0);
         } else {
-            // Idle / Standby
-            lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_BORDER), 0);
-            lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_TEXT_MUTED), 0);
-            lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_TEXT_MUTED), 0);
-
-            lv_obj_set_style_border_color(box_inv, lv_color_hex(CLR_BORDER), 0);
-            lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(CLR_TEXT_MUTED), 0);
-            lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(CLR_TEXT_MUTED), 0);
-
-            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_BORDER), 0);
-            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_CYAN), 0);
-            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_CYAN), 0);
-
-            lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_BORDER), 0);
-            lv_obj_set_style_text_color(lbl_home_icon, lv_color_white(), 0);
-            lv_obj_set_style_text_color(lbl_home_txt, lv_color_white(), 0);
-
-            lv_label_set_text(lbl_flow_arrow_grid, "--");
-            lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
+            // Standby (0A): Green if 100% full, else Slate / Muted Cyan
+            uint32_t batColor = (avgSoc >= 99.0f) ? CLR_EMERALD : CLR_CYAN;
+            lv_obj_set_style_border_color(box_bat, lv_color_hex(batColor), 0);
+            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(batColor), 0);
+            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(batColor), 0);
+            lv_label_set_text(lbl_bat_txt, (avgSoc >= 99.0f) ? "FULL 100%" : "STANDBY");
 
             lv_label_set_text(lbl_flow_arrow_bat, "--");
             lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_TEXT_MUTED), 0);
+        }
 
+        // 3. Inverter Logic (Load-based color & mode text)
+        float loadPwr = fabsf(totalPwrKw);
+        uint32_t invColor = CLR_EMERALD;
+        if (loadPwr > 4.5f) {
+            invColor = CLR_ROSE; // Overload
+        } else if (loadPwr > 2.5f) {
+            invColor = CLR_AMBER; // High load
+        } else if (loadPwr < 0.1f) {
+            invColor = CLR_BORDER; // Standby
+        } else {
+            invColor = CLR_EMERALD; // Normal load
+        }
+
+        lv_obj_set_style_border_color(box_inv, lv_color_hex(invColor), 0);
+        lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(invColor), 0);
+        lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(invColor), 0);
+
+        if (iSum > 0.5f) {
+            lv_label_set_text(lbl_inv_txt, "CHARGE");
+        } else if (iSum < -0.5f) {
+            lv_label_set_text(lbl_inv_txt, "INVERT");
+        } else {
+            lv_label_set_text(lbl_inv_txt, "BYPASS");
+        }
+
+        // 4. Home (Consumption Node)
+        lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_BORDER), 0);
+        lv_obj_set_style_text_color(lbl_home_icon, lv_color_white(), 0);
+        lv_obj_set_style_text_color(lbl_home_txt, lv_color_white(), 0);
+
+        char homeTxt[16];
+        if (loadPwr >= 0.05f) {
+            snprintf(homeTxt, sizeof(homeTxt), "%.1fkW", loadPwr);
+        } else {
+            snprintf(homeTxt, sizeof(homeTxt), "HOME");
+        }
+        lv_label_set_text(lbl_home_txt, homeTxt);
+
+        if (loadPwr > 0.1f) {
+            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]);
+            lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(invColor), 0);
+        } else {
             lv_label_set_text(lbl_flow_arrow_home, "--");
             lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_TEXT_MUTED), 0);
         }
