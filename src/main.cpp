@@ -317,6 +317,13 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_bg_color(tab, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab, 6, 0);
 
+    // Hide this pack button from the top navigation bar so only All and Logs stay visible
+    lv_obj_t *tab_btns = lv_tabview_get_tab_btns(tabview);
+    if (tab_btns) {
+        uint16_t btn_idx = pack_idx + 2; // 0=All, 1=Logs, 2..N=Packs
+        lv_btnmatrix_set_btn_ctrl(tab_btns, btn_idx, LV_BTNMATRIX_CTRL_HIDDEN);
+    }
+
     PackUI &ui = g_pack_ui[pack_idx];
     ui.tab = tab;
 
@@ -603,7 +610,7 @@ static void build_ui() {
 
     // System Status Bar (Fixed on top of tabview header)
     lv_obj_t *top_status_bar = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(top_status_bar, 180, 32);
+    lv_obj_set_size(top_status_bar, 170, 32);
     lv_obj_align(top_status_bar, LV_ALIGN_TOP_RIGHT, -4, 1);
     lv_obj_set_style_bg_opa(top_status_bar, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(top_status_bar, 0, 0);
@@ -620,7 +627,7 @@ static void build_ui() {
     lv_label_set_text(lbl_top_ip, LV_SYMBOL_WIFI " ...");
     lv_obj_set_style_text_color(lbl_top_ip, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_10, 0);
-    lv_obj_align_to(lbl_top_ip, lbl_top_power_src, LV_ALIGN_OUT_LEFT_MID, -8, 0);
+    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -42, 0);
 
     // 1. Pack Selector Quick Strip Card (4 Active Buttons at Top)
     lv_obj_t *pack_strip_card = create_glass_card(tab_overview, 308, 48);
