@@ -584,7 +584,7 @@ static void build_ui() {
     lv_obj_align(top_bar, LV_ALIGN_TOP_MID, 0, 0);
 
     lbl_mode_pill = lv_label_create(top_bar);
-    lv_label_set_text(lbl_mode_pill, "● NORMAL OPERATION");
+    lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " NORMAL OPERATION");
     lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(lbl_mode_pill, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_mode_pill, LV_ALIGN_LEFT_MID, 4, 0);
@@ -662,28 +662,29 @@ static void build_ui() {
     lv_obj_align(lbl_current_val, LV_ALIGN_RIGHT_MID, -6, 34);
 
     // 3. Dynamic Alarm Banner
-    card_alarm_banner = create_glass_card(tab_overview, 308, 46);
+    card_alarm_banner = create_glass_card(tab_overview, 308, 48);
     lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 214);
     lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0);
     lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_clear_flag(card_alarm_banner, LV_OBJ_FLAG_SCROLLABLE);
 
     lbl_alarm_icon = lv_label_create(card_alarm_banner);
-    lv_label_set_text(lbl_alarm_icon, "●");
+    lv_label_set_text(lbl_alarm_icon, LV_SYMBOL_OK);
     lv_obj_set_style_text_color(lbl_alarm_icon, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_alarm_icon, &lv_font_montserrat_16, 0);
-    lv_obj_align(lbl_alarm_icon, LV_ALIGN_LEFT_MID, 2, 0);
+    lv_obj_set_style_text_font(lbl_alarm_icon, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_alarm_icon, LV_ALIGN_LEFT_MID, 4, 0);
 
     lbl_alarm_title = lv_label_create(card_alarm_banner);
     lv_label_set_text(lbl_alarm_title, "SYSTEM STATUS: ALL OK");
     lv_obj_set_style_text_color(lbl_alarm_title, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(lbl_alarm_title, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_alarm_title, LV_ALIGN_TOP_LEFT, 20, 0);
+    lv_obj_align(lbl_alarm_title, LV_ALIGN_TOP_LEFT, 26, -2);
 
     lbl_alarm_details = lv_label_create(card_alarm_banner);
     lv_label_set_text(lbl_alarm_details, "No active warnings, protections or faults");
     lv_obj_set_style_text_color(lbl_alarm_details, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_alarm_details, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_alarm_details, LV_ALIGN_BOTTOM_LEFT, 20, 0);
+    lv_obj_align(lbl_alarm_details, LV_ALIGN_BOTTOM_LEFT, 26, 2);
 
     // 4. Bank Health & Delta Card
     lv_obj_t *health_card = create_glass_card(tab_overview, 308, 86);
@@ -762,12 +763,12 @@ static void update_ui() {
     // Update Overview button status if logging
     if (Logger.isAutoAlarmLogging()) {
         char recTxt[48];
-        snprintf(recTxt, sizeof(recTxt), "● AUTO ALARM REC: %u", Logger.getAlarmRows());
+        snprintf(recTxt, sizeof(recTxt), "%s AUTO ALARM: %u", LV_SYMBOL_BELL, Logger.getAlarmRows());
         lv_label_set_text(lbl_bank_log, recTxt);
         lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_ROSE), 0);
     } else if (Logger.isBankLogging()) {
         char recTxt[48];
-        snprintf(recTxt, sizeof(recTxt), "● REC BANK: %u ROWS", Logger.getBankRows());
+        snprintf(recTxt, sizeof(recTxt), "%s REC ALL: %u ROWS", LV_SYMBOL_SAVE, Logger.getBankRows());
         lv_label_set_text(lbl_bank_log, recTxt);
         lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_ROSE), 0);
     } else {
@@ -831,23 +832,23 @@ static void update_ui() {
     }
 
     if (alarms) {
-        lv_label_set_text(lbl_mode_pill, "⚠️ ALARM / PROTECTION DETECTED");
+        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_WARNING " ALARM DETECTED");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_ROSE), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_ROSE), LV_PART_INDICATOR);
     } else if (anyBalancing) {
-        lv_label_set_text(lbl_mode_pill, "⚡ ACTIVE BALANCING");
+        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_CHARGE " BALANCING");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_AMBER), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_AMBER), LV_PART_INDICATOR);
     } else if (iSum > 0.5f) {
-        lv_label_set_text(lbl_mode_pill, "▲ CHARGING");
+        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_UP " CHARGING");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_EMERALD), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
     } else if (iSum < -0.5f) {
-        lv_label_set_text(lbl_mode_pill, "▼ DISCHARGING");
+        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_DOWN " DISCHARGING");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_BLUE), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_BLUE), LV_PART_INDICATOR);
     } else {
-        lv_label_set_text(lbl_mode_pill, "● STANDBY / IDLE");
+        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " STANDBY / IDLE");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_CYAN), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_CYAN), LV_PART_INDICATOR);
     }
@@ -855,7 +856,7 @@ static void update_ui() {
     if (alarms) {
         lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x4C0519), 0);
         lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_ROSE), 0);
-        lv_label_set_text(lbl_alarm_icon, "⚠️");
+        lv_label_set_text(lbl_alarm_icon, LV_SYMBOL_WARNING);
         lv_obj_set_style_text_color(lbl_alarm_icon, lv_color_hex(CLR_ROSE), 0);
 
         String title = "FAULT: " + firstAlarmPack;
@@ -866,7 +867,7 @@ static void update_ui() {
     } else {
         lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0);
         lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_EMERALD), 0);
-        lv_label_set_text(lbl_alarm_icon, "●");
+        lv_label_set_text(lbl_alarm_icon, LV_SYMBOL_OK);
         lv_obj_set_style_text_color(lbl_alarm_icon, lv_color_hex(CLR_EMERALD), 0);
 
         lv_label_set_text(lbl_alarm_title, "SYSTEM STATUS: ALL OK");
@@ -943,7 +944,7 @@ static void update_ui() {
             lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_ROSE), 0);
             
             String dec = decodeAlarmString(p);
-            lv_label_set_text(ui.lbl_alarm_text, ("⚠️ " + dec).c_str());
+            lv_label_set_text(ui.lbl_alarm_text, (String(LV_SYMBOL_WARNING " ") + dec).c_str());
             lv_obj_set_style_text_color(ui.lbl_alarm_text, lv_color_hex(CLR_ROSE), 0);
             lv_obj_set_style_bg_color(ui.card_alarm, lv_color_hex(0x4C0519), 0);
             lv_obj_set_style_border_color(ui.card_alarm, lv_color_hex(CLR_ROSE), 0);
