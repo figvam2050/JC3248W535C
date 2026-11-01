@@ -132,10 +132,12 @@ static lv_obj_t *pack_strip_card = NULL;
 static lv_obj_t *tab_settings = NULL;
 static lv_obj_t *slider_brightness = NULL;
 static lv_obj_t *lbl_bright_val = NULL;
+static lv_obj_t *dropdown_timeout = NULL;
 static lv_obj_t *sw_sound = NULL;
 static lv_obj_t *sw_autolog = NULL;
 static uint8_t s_current_brightness = BRIGHTNESS_HIGH;
 static bool s_sound_enabled = true;
+static uint32_t s_screen_off_timeout_ms = 60000; // Default: 1 minute (0 = Never)
 
 static void update_top_nav_state(uint16_t act_idx) {
     if (!btn_nav_settings || !btn_nav_all || !btn_nav_logs) return;
@@ -375,7 +377,7 @@ static bool touch_read_hw(uint16_t &x, uint16_t &y) {
         s_last_touch_time = millis();
         if (s_is_screen_dimmed) {
             s_is_screen_dimmed = false;
-            set_backlight_brightness(BRIGHTNESS_HIGH);
+            set_backlight_brightness(s_current_brightness);
         }
 
         static uint32_t s_last_click_ms = 0;
@@ -679,13 +681,28 @@ static void sw_sound_cb(lv_event_t *e) {
     }
 }
 
+static void dropdown_timeout_cb(lv_event_t *e) {
+    lv_obj_t *dropdown = lv_event_get_target(e);
+    uint16_t selected = lv_dropdown_get_selected(dropdown);
+    // Options: 0: 30 sec, 1: 1 min, 2: 2 min, 3: 5 min, 4: Never
+    switch (selected) {
+        case 0: s_screen_off_timeout_ms = 30000; break;
+        case 1: s_screen_off_timeout_ms = 60000; break;
+        case 2: s_screen_off_timeout_ms = 120000; break;
+        case 3: s_screen_off_timeout_ms = 300000; break;
+        case 4: s_screen_off_timeout_ms = 0; break; // Never turn off
+        default: s_screen_off_timeout_ms = 60000; break;
+    }
+    BmsAudio.playClick();
+}
+
 static void create_settings_tab() {
     tab_settings = lv_tabview_add_tab(tabview, "Settings");
     lv_obj_set_style_bg_color(tab_settings, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_settings, 6, 0);
 
-    // 1. Display & Brightness Card
-    lv_obj_t *card_disp = create_glass_card(tab_settings, 308, 92);
+    // 1. Display & Brightness Card (Enlarged to 142px to host Screen Off Dropdown)
+    lv_obj_t *card_disp = create_glass_card(tab_settings, 308, 142);
     lv_obj_align(card_disp, LV_ALIGN_TOP_MID, 0, 0);
 
     lv_obj_t *lbl_disp_title = lv_label_create(card_disp);
@@ -702,7 +719,7 @@ static void create_settings_tab() {
 
     slider_brightness = lv_slider_create(card_disp);
     lv_obj_set_size(slider_brightness, 280, 14);
-    lv_obj_align(slider_brightness, LV_ALIGN_BOTTOM_MID, 0, -8);
+    lv_obj_set_pos(slider_brightness, 6, 26);
     lv_slider_set_range(slider_brightness, 20, 255);
     lv_slider_set_value(slider_brightness, s_current_brightness, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(CLR_PANEL_INNER), 0);
@@ -710,9 +727,34 @@ static void create_settings_tab() {
     lv_obj_set_style_bg_color(slider_brightness, lv_color_white(), LV_PART_KNOB);
     lv_obj_add_event_cb(slider_brightness, slider_brightness_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    // Screen Sleep / 100% Turn Off Dropdown
+    lv_obj_t *lbl_sleep_title = lv_label_create(card_disp);
+    lv_label_set_text(lbl_sleep_title, LV_SYMBOL_POWER " SCREEN TIMEOUT (100% OFF):");
+    lv_obj_set_style_text_color(lbl_sleep_title, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_sleep_title, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_sleep_title, 2, 54);
+
+    dropdown_timeout = lv_dropdown_create(card_disp);
+    lv_obj_set_size(dropdown_timeout, 280, 36);
+    lv_obj_set_pos(dropdown_timeout, 6, 72);
+    lv_dropdown_set_options(dropdown_timeout, 
+        "30 Seconds\n"
+        "1 Minute\n"
+        "2 Minutes\n"
+        "5 Minutes\n"
+        "Never (Always ON)"
+    );
+    lv_dropdown_set_selected(dropdown_timeout, 1); // Default: 1 Minute
+    lv_obj_set_style_bg_color(dropdown_timeout, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(dropdown_timeout, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_text_color(dropdown_timeout, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(dropdown_timeout, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_radius(dropdown_timeout, 8, 0);
+    lv_obj_add_event_cb(dropdown_timeout, dropdown_timeout_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
     // 2. Audio & Notifications Card
-    lv_obj_t *card_audio = create_glass_card(tab_settings, 308, 64);
-    lv_obj_align(card_audio, LV_ALIGN_TOP_MID, 0, 98);
+    lv_obj_t *card_audio = create_glass_card(tab_settings, 308, 54);
+    lv_obj_align(card_audio, LV_ALIGN_TOP_MID, 0, 148);
 
     lv_obj_t *lbl_audio_title = lv_label_create(card_audio);
     lv_label_set_text(lbl_audio_title, LV_SYMBOL_AUDIO " TOUCH CLICKS & BEEP");
@@ -728,8 +770,8 @@ static void create_settings_tab() {
     lv_obj_add_event_cb(sw_sound, sw_sound_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // 3. System & Network Diagnostics Card
-    lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 190);
-    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 168);
+    lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 185);
+    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 208);
 
     lv_obj_t *lbl_sys_title = lv_label_create(card_sys);
     lv_label_set_text(lbl_sys_title, LV_SYMBOL_SETTINGS " SYSTEM & RS485 SPECS");
@@ -1786,9 +1828,9 @@ void setup() {
 void loop() {
     lv_timer_handler();
 
-    if (!s_is_screen_dimmed && (millis() - s_last_touch_time > SCREENSAVER_TIMEOUT_MS)) {
+    if (!s_is_screen_dimmed && s_screen_off_timeout_ms > 0 && (millis() - s_last_touch_time > s_screen_off_timeout_ms)) {
         s_is_screen_dimmed = true;
-        set_backlight_brightness(BRIGHTNESS_DIM);
+        set_backlight_brightness(0); // 100% Turn off backlight
     }
 
     static uint32_t last_ui_update = 0;
