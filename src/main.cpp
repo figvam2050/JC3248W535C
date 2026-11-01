@@ -123,6 +123,11 @@ static lv_obj_t *btn_nav_logs = NULL;
 static lv_obj_t *lbl_nav_all = NULL;
 static lv_obj_t *lbl_nav_logs = NULL;
 
+// Dynamic Pack Tabs mapping
+static uint8_t s_active_pack_count = 4; // Tracks current number of active packs
+static uint16_t s_logs_tab_index = 2;   // Always points to the Logs tab index
+static lv_obj_t *pack_strip_card = NULL;
+
 // Dedicated Settings Tab Widgets
 static lv_obj_t *tab_settings = NULL;
 static lv_obj_t *slider_brightness = NULL;
@@ -154,12 +159,12 @@ static void update_top_nav_state(uint16_t act_idx) {
         lv_obj_set_style_border_color(btn_nav_settings, lv_color_hex(CLR_CYAN), 0);
         lv_obj_set_style_text_color(lbl_nav_settings, lv_color_hex(CLR_CYAN), 0);
     } else if (act_idx == 1) {
-        // "All" active
+        // "Home" active
         lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(0x164E63), 0);
         lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_CYAN), 0);
         lv_obj_set_style_text_color(lbl_nav_all, lv_color_hex(CLR_CYAN), 0);
-    } else if (act_idx == 2) {
-        // "Logs" active
+    } else if (act_idx == s_logs_tab_index) {
+        // "Logs" active (always dynamically mapped to the last tab)
         lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(0x164E63), 0);
         lv_obj_set_style_border_color(btn_nav_logs, lv_color_hex(CLR_CYAN), 0);
         lv_obj_set_style_text_color(lbl_nav_logs, lv_color_hex(CLR_CYAN), 0);
@@ -184,8 +189,8 @@ static void nav_all_click_cb(lv_event_t *e) {
 
 static void nav_logs_click_cb(lv_event_t *e) {
     if (tabview) {
-        lv_tabview_set_act(tabview, 2, LV_ANIM_ON);
-        update_top_nav_state(2);
+        lv_tabview_set_act(tabview, s_logs_tab_index, LV_ANIM_ON);
+        update_top_nav_state(s_logs_tab_index);
         BmsAudio.playClick();
     }
 }
@@ -199,8 +204,8 @@ static void tabview_change_cb(lv_event_t *e) {
 
 static void pack_strip_click_cb(lv_event_t *e) {
     uintptr_t idx = (uintptr_t)lv_event_get_user_data(e);
-    // Tab 0 is Settings, Tab 1 is All, Tab 2 is Logs, Tab 3..N are Packs
-    uint16_t targetTab = idx + 3;
+    // Tab 0: Settings, Tab 1: Home, Tab 2..(2 + activePacks - 1): Packs, Last Tab: Logs
+    uint16_t targetTab = idx + 2;
     if (tabview) {
         lv_tabview_set_act(tabview, targetTab, LV_ANIM_ON);
         update_top_nav_state(targetTab);
@@ -901,19 +906,26 @@ static void build_ui() {
     // Create Settings Tab first (Tab 0)
     create_settings_tab();
 
-    tab_overview = lv_tabview_add_tab(tabview, "All");
+    // Create Home (Overview) Tab (Tab 1)
+    tab_overview = lv_tabview_add_tab(tabview, "Home");
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_overview, 6, 0);
 
-    // Create Dedicated Logs Tab (Tab 2)
-    create_logs_tab();
+    // Create Initial Battery Pack Tabs (Tabs 2 .. 2+N-1)
+    for (uint8_t i = 0; i < s_active_pack_count; i++) {
+        create_battery_tab(i);
+    }
 
-    // Default active tab is "All" (Tab 1)
+    // Create Dedicated Logs Tab as the LAST Tab
+    create_logs_tab();
+    s_logs_tab_index = 2 + s_active_pack_count;
+
+    // Default active tab is "Home" (Tab 1)
     lv_tabview_set_act(tabview, 1, LV_ANIM_OFF);
     update_top_nav_state(1);
 
-    // 1. Pack Selector Quick Strip Card (4 Active Buttons at Top)
-    lv_obj_t *pack_strip_card = create_glass_card(tab_overview, 308, 48);
+    // 1. Pack Selector Quick Strip Card (Dynamic Widths)
+    pack_strip_card = create_glass_card(tab_overview, 308, 48);
     lv_obj_align(pack_strip_card, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_pad_all(pack_strip_card, 2, 0);
 
@@ -1443,11 +1455,34 @@ static void update_ui() {
         lv_label_set_text(lbl_delta_extremes, buf);
     }
 
-    // Update V2 Pack Quick Selector Strip (first 4 packs)
+    // Dynamic layout adaptation for Pack Selector Strip based on actual online pack count
+    uint8_t onlinePacks = 0;
+    for (int p = 0; p < 4; p++) {
+        if (local_packs[p].isOnline) onlinePacks++;
+    }
+    if (onlinePacks == 0) onlinePacks = 1; // At least 1 slot reserved if offline
+
+    // Calculate dynamic button widths for perfect fit across 304px available inner width
+    int total_avail_w = 304;
+    int gap = (onlinePacks > 1) ? 4 : 0;
+    int btn_w = (total_avail_w - (onlinePacks - 1) * gap) / onlinePacks;
+    int cur_x = 2;
+
     for (int pIdx = 0; pIdx < 4; pIdx++) {
-        if (local_packs[pIdx].isOnline) {
-            char pStr[16];
-            snprintf(pStr, sizeof(pStr), "P%02d %u%%", pIdx + 1, local_packs[pIdx].soc);
+        if (pIdx < onlinePacks && local_packs[pIdx].isOnline) {
+            lv_obj_clear_flag(pack_strip_btns[pIdx], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_size(pack_strip_btns[pIdx], btn_w, 40);
+            lv_obj_set_pos(pack_strip_btns[pIdx], cur_x, 2);
+            lv_obj_set_size(pack_strip_bars[pIdx], btn_w - 10, 5);
+            cur_x += btn_w + gap;
+
+            char pStr[24];
+            if (onlinePacks <= 2) {
+                // Generous width: show pack name, SOC% and voltage!
+                snprintf(pStr, sizeof(pStr), "P%02d  %u%%  %.1fV", pIdx + 1, local_packs[pIdx].soc, local_packs[pIdx].voltage);
+            } else {
+                snprintf(pStr, sizeof(pStr), "P%02d %u%%", pIdx + 1, local_packs[pIdx].soc);
+            }
             lv_label_set_text(pack_strip_lbls[pIdx], pStr);
             lv_bar_set_value(pack_strip_bars[pIdx], local_packs[pIdx].soc, LV_ANIM_OFF);
 
@@ -1465,13 +1500,19 @@ static void update_ui() {
                 lv_obj_set_style_border_color(pack_strip_btns[pIdx], lv_color_hex(CLR_BORDER), 0);
                 lv_obj_set_style_bg_color(pack_strip_bars[pIdx], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
             }
-        } else {
-            char pStr[16];
-            snprintf(pStr, sizeof(pStr), "P%02d OFF", pIdx + 1);
-            lv_label_set_text(pack_strip_lbls[pIdx], pStr);
+        } else if (onlinePacks == 1 && !local_packs[0].isOnline && pIdx == 0) {
+            // When everything is offline, show P01 as waiting
+            lv_obj_clear_flag(pack_strip_btns[pIdx], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_size(pack_strip_btns[pIdx], total_avail_w, 40);
+            lv_obj_set_pos(pack_strip_btns[pIdx], 2, 2);
+            lv_obj_set_size(pack_strip_bars[pIdx], total_avail_w - 10, 5);
+            lv_label_set_text(pack_strip_lbls[pIdx], "WAITING FOR RS485 PACKS...");
             lv_bar_set_value(pack_strip_bars[pIdx], 0, LV_ANIM_OFF);
             lv_obj_set_style_text_color(pack_strip_lbls[pIdx], lv_color_hex(CLR_TEXT_MUTED), 0);
             lv_obj_set_style_border_color(pack_strip_btns[pIdx], lv_color_hex(CLR_BORDER), 0);
+        } else {
+            // Hide unused buttons!
+            lv_obj_add_flag(pack_strip_btns[pIdx], LV_OBJ_FLAG_HIDDEN);
         }
     }
 
