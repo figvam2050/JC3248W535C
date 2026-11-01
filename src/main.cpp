@@ -144,11 +144,10 @@ static void nav_logs_click_cb(lv_event_t *e) {
     }
 }
 
-static void back_to_all_click_cb(lv_event_t *e) {
+static void tabview_change_cb(lv_event_t *e) {
     if (tabview) {
-        lv_tabview_set_act(tabview, 0, LV_ANIM_ON);
-        update_top_nav_state(0);
-        BmsAudio.playClick();
+        uint16_t act = lv_tabview_get_tab_act(tabview);
+        update_top_nav_state(act);
     }
 }
 
@@ -390,21 +389,21 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_t *top_card = create_glass_card(tab, 308, 88);
     lv_obj_align(top_card, LV_ALIGN_TOP_MID, 0, 0);
 
-    // Pack Name Label: e.g. "БАТАРЕЯ #1 (PACK 1)"
+    // Pack Name Label: e.g. "PACK #1"
     ui.lbl_title = lv_label_create(top_card);
     char pTitle[32];
-    snprintf(pTitle, sizeof(pTitle), "БАТАРЕЯ #%u", pack_idx + 1);
+    snprintf(pTitle, sizeof(pTitle), "PACK #%u", pack_idx + 1);
     lv_label_set_text(ui.lbl_title, pTitle);
     lv_obj_set_style_text_color(ui.lbl_title, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(ui.lbl_title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(ui.lbl_title, &lv_font_montserrat_14, 0);
     lv_obj_align(ui.lbl_title, LV_ALIGN_TOP_LEFT, 2, 0);
 
     // Status Pill (e.g. "CHARGING", "STANDBY")
     ui.lbl_status = lv_label_create(top_card);
     lv_label_set_text(ui.lbl_status, "NORMAL");
     lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(ui.lbl_status, &lv_font_montserrat_10, 0);
-    lv_obj_align(ui.lbl_status, LV_ALIGN_TOP_LEFT, 110, 2);
+    lv_obj_set_style_text_font(ui.lbl_status, &lv_font_montserrat_12, 0);
+    lv_obj_align(ui.lbl_status, LV_ALIGN_TOP_LEFT, 86, 1);
 
     ui.lbl_delta = lv_label_create(top_card);
     lv_label_set_text(ui.lbl_delta, "Delta: -- mV");
@@ -723,6 +722,7 @@ static void build_ui() {
     lv_obj_set_size(tabview, 320, 444);
     lv_obj_set_pos(tabview, 0, 36);
     lv_obj_set_style_bg_color(tabview, lv_color_hex(CLR_DARK_BG), 0);
+    lv_obj_add_event_cb(tabview, tabview_change_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     tab_overview = lv_tabview_add_tab(tabview, "All");
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(CLR_DARK_BG), 0);
