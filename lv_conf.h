@@ -11,7 +11,13 @@
 #define LV_COLOR_16_SWAP 0
 
 /* Memory settings: using ESP32 PSRAM */
-#define LV_MEM_CUSTOM 0
+#define LV_MEM_CUSTOM 1
+#if LV_MEM_CUSTOM == 1
+    #define LV_MEM_CUSTOM_INCLUDE "esp_heap_caps.h"
+    #define LV_MEM_CUSTOM_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+    #define LV_MEM_CUSTOM_FREE(ptr)   free(ptr)
+    #define LV_MEM_CUSTOM_REALLOC(ptr, new_size) heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+#endif
 #define LV_MEM_SIZE (128U * 1024U)
 
 /* Tick source */

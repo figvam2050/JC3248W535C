@@ -83,6 +83,9 @@ void WebGateway::tryConnectSTA() {
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf("[Wi-Fi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+        // Configure NTP for Europe/Kyiv (EET-2EEST,M3.5.0/3,M10.5.0/4)
+        configTzTime("EET-2EEST,M3.5.0/3,M10.5.0/4", "pool.ntp.org", "time.google.com", "time.cloudflare.com");
+        Serial.println("[NTP] SNTP client started for Europe/Kyiv");
     } else {
         Serial.println("[Wi-Fi] Failed to connect to saved network. Fallback to AP Mode!");
         startAP();

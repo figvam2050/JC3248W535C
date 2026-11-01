@@ -17,6 +17,8 @@ public:
     int getRssi();
     bool isConnected();
     bool isAPMode();
+    void startAP();
+    void tryConnectSTA();
 
 private:
     AsyncWebServer* _server = nullptr;
@@ -30,8 +32,6 @@ private:
     String _pass = "";
 
     void setupRoutes();
-    void startAP();
-    void tryConnectSTA();
 };
 
 extern WebGateway Gateway;

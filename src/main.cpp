@@ -120,39 +120,25 @@ static lv_obj_t *top_nav_bar = NULL;
 static lv_obj_t *btn_nav_settings = NULL;
 static lv_obj_t *lbl_nav_settings = NULL;
 static lv_obj_t *btn_nav_all = NULL;
-static lv_obj_t *btn_nav_charts = NULL;
-static lv_obj_t *btn_nav_matrix = NULL;
 static lv_obj_t *btn_nav_logs = NULL;
 static lv_obj_t *lbl_nav_all = NULL;
-static lv_obj_t *lbl_nav_charts = NULL;
-static lv_obj_t *lbl_nav_matrix = NULL;
 static lv_obj_t *lbl_nav_logs = NULL;
-
-// Dedicated Charts Tab Widgets
-static lv_obj_t *tab_charts = NULL;
-static lv_obj_t *chart_pwr = NULL;
-static lv_chart_series_t *ser_pwr = NULL;
-static lv_chart_series_t *ser_cur = NULL;
-static lv_obj_t *lbl_chart_pwr_val = NULL;
-static lv_obj_t *chart_delta = NULL;
-static lv_chart_series_t *ser_delta = NULL;
-static lv_obj_t *lbl_chart_delta_val = NULL;
-
-// Dedicated Health Matrix Tab Widgets
-static lv_obj_t *tab_matrix = NULL;
-static lv_obj_t *matrix_pack_cards[MAX_BATTERIES];
-static lv_obj_t *lbl_matrix_title[MAX_BATTERIES];
-static lv_obj_t *lbl_matrix_cur[MAX_BATTERIES];
-static lv_obj_t *bar_matrix_cur[MAX_BATTERIES];
-static lv_obj_t *lbl_matrix_health[MAX_BATTERIES];
-static lv_obj_t *lbl_matrix_diag = NULL;
 
 // Dynamic Pack Tabs mapping
 static uint8_t s_active_pack_count = 4; // Tracks current number of active packs
-static uint16_t s_charts_tab_index = 2; // Tab 2 is Charts
-static uint16_t s_matrix_tab_index = 3; // Tab 3 is Matrix
-static uint16_t s_logs_tab_index = 4;   // Logs tab index (after Charts, Matrix and Packs)
+static uint16_t s_logs_tab_index = 2;   // Logs tab index (after Settings, Home, and Packs)
 static lv_obj_t *pack_strip_card = NULL;
+
+// Top Nav Real-time Clock widget
+static lv_obj_t *lbl_top_clock = NULL;
+
+// Energy Trip Meter (Session Energy counters in kWh)
+static float s_energy_charge_kwh = 0.0f;
+static float s_energy_discharge_kwh = 0.0f;
+static uint32_t s_last_energy_calc_ms = 0;
+static lv_obj_t *card_trip_meter = NULL;
+static lv_obj_t *lbl_trip_chg = NULL;
+static lv_obj_t *lbl_trip_disch = NULL;
 
 // Dedicated Settings Tab Widgets
 static lv_obj_t *tab_settings = NULL;
@@ -170,7 +156,8 @@ enum ScreenSleepMode {
     SLEEP_MODE_OFF = 0,    // 100% Turn off backlight
     SLEEP_MODE_DIM = 1,    // Dim to 15% (night glow)
     SLEEP_MODE_SAVER = 2,  // Clock & Power Minimal Screensaver
-    SLEEP_MODE_ORB = 3     // Energy Orb / Battery HUD Screensaver
+    SLEEP_MODE_ORB = 3,    // Energy Orb / Battery HUD Screensaver
+    SLEEP_MODE_MATRIX = 4  // Matrix Rain / Cyber Terminal Screensaver
 };
 static ScreenSleepMode s_sleep_mode = SLEEP_MODE_SAVER;
 
@@ -195,10 +182,20 @@ static lv_obj_t *lbl_ss_orb_val = NULL;
 static lv_obj_t *lbl_ss_orb_sub = NULL;
 static lv_obj_t *lbl_ss_orb_pwr = NULL;
 
+// Matrix Rain Screensaver Widgets
+static lv_obj_t *ss_matrix_cluster = NULL;
+static lv_obj_t *lbl_matrix_rain_cols[6]; // 6 falling digital streams across 320px
+static uint8_t s_matrix_rain_offset[6];   // Stream step offsets
+
+// Fullscreen Screen Colors Test Overlay
+static lv_obj_t *scr_test_overlay = NULL;
+static lv_obj_t *lbl_scr_test_hint = NULL;
+static uint8_t s_scr_test_step = 0;
+
 static uint32_t s_ss_burnin_step = 0;
 
 static void update_top_nav_state(uint16_t act_idx) {
-    if (!btn_nav_settings || !btn_nav_all || !btn_nav_charts || !btn_nav_matrix || !btn_nav_logs) return;
+    if (!btn_nav_settings || !btn_nav_all || !btn_nav_logs) return;
 
     // Reset all buttons to default inactive style
     lv_obj_set_style_bg_color(btn_nav_settings, lv_color_hex(CLR_PANEL_INNER), 0);
@@ -208,14 +205,6 @@ static void update_top_nav_state(uint16_t act_idx) {
     lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_text_color(lbl_nav_all, lv_color_hex(CLR_TEXT_MUTED), 0);
-
-    lv_obj_set_style_bg_color(btn_nav_charts, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_border_color(btn_nav_charts, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_text_color(lbl_nav_charts, lv_color_hex(CLR_TEXT_MUTED), 0);
-
-    lv_obj_set_style_bg_color(btn_nav_matrix, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_border_color(btn_nav_matrix, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_text_color(lbl_nav_matrix, lv_color_hex(CLR_TEXT_MUTED), 0);
 
     lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_logs, lv_color_hex(CLR_BORDER), 0);
@@ -231,16 +220,6 @@ static void update_top_nav_state(uint16_t act_idx) {
         lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(0x164E63), 0);
         lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_CYAN), 0);
         lv_obj_set_style_text_color(lbl_nav_all, lv_color_hex(CLR_CYAN), 0);
-    } else if (act_idx == s_charts_tab_index) {
-        // "Charts" active
-        lv_obj_set_style_bg_color(btn_nav_charts, lv_color_hex(0x164E63), 0);
-        lv_obj_set_style_border_color(btn_nav_charts, lv_color_hex(CLR_CYAN), 0);
-        lv_obj_set_style_text_color(lbl_nav_charts, lv_color_hex(CLR_CYAN), 0);
-    } else if (act_idx == s_matrix_tab_index) {
-        // "Matrix" active
-        lv_obj_set_style_bg_color(btn_nav_matrix, lv_color_hex(0x164E63), 0);
-        lv_obj_set_style_border_color(btn_nav_matrix, lv_color_hex(CLR_CYAN), 0);
-        lv_obj_set_style_text_color(lbl_nav_matrix, lv_color_hex(CLR_CYAN), 0);
     } else if (act_idx == s_logs_tab_index) {
         // "Logs" active (always dynamically mapped to the last tab)
         lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(0x164E63), 0);
@@ -265,22 +244,6 @@ static void nav_all_click_cb(lv_event_t *e) {
     }
 }
 
-static void nav_charts_click_cb(lv_event_t *e) {
-    if (tabview) {
-        lv_tabview_set_act(tabview, s_charts_tab_index, LV_ANIM_ON);
-        update_top_nav_state(s_charts_tab_index);
-        BmsAudio.playClick();
-    }
-}
-
-static void nav_matrix_click_cb(lv_event_t *e) {
-    if (tabview) {
-        lv_tabview_set_act(tabview, s_matrix_tab_index, LV_ANIM_ON);
-        update_top_nav_state(s_matrix_tab_index);
-        BmsAudio.playClick();
-    }
-}
-
 static void nav_logs_click_cb(lv_event_t *e) {
     if (tabview) {
         lv_tabview_set_act(tabview, s_logs_tab_index, LV_ANIM_ON);
@@ -298,8 +261,8 @@ static void tabview_change_cb(lv_event_t *e) {
 
 static void pack_strip_click_cb(lv_event_t *e) {
     uintptr_t idx = (uintptr_t)lv_event_get_user_data(e);
-    // Tab 0: Settings, Tab 1: Home, Tab 2: Charts, Tab 3: Matrix, Tab 4..(4 + activePacks - 1): Packs, Last Tab: Logs
-    uint16_t targetTab = idx + 4;
+    // Tab 0: Settings, Tab 1: Home, Tab 2..(2 + activePacks - 1): Packs, Last Tab: Logs
+    uint16_t targetTab = idx + 2;
     if (tabview) {
         lv_tabview_set_act(tabview, targetTab, LV_ANIM_ON);
         update_top_nav_state(targetTab);
@@ -325,6 +288,7 @@ static lv_obj_t *lbl_bank_log = NULL;
 // Top Header Widgets (Fixed on top of screen)
 static lv_obj_t *lbl_top_power_src = NULL;
 static lv_obj_t *lbl_top_ip = NULL;
+static lv_obj_t *wifi_bar_obj[4] = {NULL, NULL, NULL, NULL};
 
 // Dedicated Logs Tab Widgets
 static lv_obj_t *tab_logs = NULL;
@@ -335,6 +299,7 @@ static void refresh_logs_ui();
 struct PackUI {
     lv_obj_t *tab;
     lv_obj_t *lbl_title;
+    lv_obj_t *lbl_cycles;
     lv_obj_t *lbl_status;
     lv_obj_t *lbl_voltage;
     lv_obj_t *lbl_current;
@@ -554,12 +519,19 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_text_font(ui.lbl_title, &lv_font_montserrat_14, 0);
     lv_obj_align(ui.lbl_title, LV_ALIGN_TOP_LEFT, 2, 0);
 
-    // Status Pill (e.g. "CHARGING", "STANDBY")
+    // Cycles Badge (immediately after PACK #N)
+    ui.lbl_cycles = lv_label_create(top_card);
+    lv_label_set_text(ui.lbl_cycles, "0 cyc");
+    lv_obj_set_style_text_color(ui.lbl_cycles, lv_color_hex(CLR_AMBER), 0);
+    lv_obj_set_style_text_font(ui.lbl_cycles, &lv_font_montserrat_12, 0);
+    lv_obj_align(ui.lbl_cycles, LV_ALIGN_TOP_LEFT, 72, 1);
+
+    // Status Pill (e.g. "NORMAL", "ALARM", "CHARGING") after cycles
     ui.lbl_status = lv_label_create(top_card);
     lv_label_set_text(ui.lbl_status, "NORMAL");
     lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(ui.lbl_status, &lv_font_montserrat_12, 0);
-    lv_obj_align(ui.lbl_status, LV_ALIGN_TOP_LEFT, 86, 1);
+    lv_obj_align(ui.lbl_status, LV_ALIGN_TOP_LEFT, 126, 1);
 
     ui.lbl_delta = lv_label_create(top_card);
     lv_label_set_text(ui.lbl_delta, "Delta: -- mV");
@@ -811,6 +783,38 @@ static void sw_demo_cb(lv_event_t *e) {
     if (s_sound_enabled) BmsAudio.playClick();
 }
 
+static void scr_test_next_step() {
+    if (!scr_test_overlay) return;
+    s_scr_test_step++;
+    // Colors: 1: Red, 2: Green, 3: Blue, 4: White, 5: Black, 6: Exit
+    uint32_t clr = 0x000000;
+    const char *colorName = "";
+    switch (s_scr_test_step) {
+        case 1: clr = 0xFF0000; colorName = "RED (Tap for next)"; break;
+        case 2: clr = 0x00FF00; colorName = "GREEN (Tap for next)"; break;
+        case 3: clr = 0x0000FF; colorName = "BLUE (Tap for next)"; break;
+        case 4: clr = 0xFFFFFF; colorName = "WHITE (Tap for next)"; break;
+        case 5: clr = 0x000000; colorName = "BLACK (Tap to finish)"; break;
+        default:
+            lv_obj_add_flag(scr_test_overlay, LV_OBJ_FLAG_HIDDEN);
+            s_scr_test_step = 0;
+            return;
+    }
+    lv_obj_set_style_bg_color(scr_test_overlay, lv_color_hex(clr), 0);
+    if (lbl_scr_test_hint) {
+        lv_label_set_text(lbl_scr_test_hint, colorName);
+        lv_obj_set_style_text_color(lbl_scr_test_hint, (s_scr_test_step == 4) ? lv_color_black() : lv_color_white(), 0);
+    }
+}
+
+static void btn_screen_test_cb(lv_event_t *e) {
+    if (s_sound_enabled) BmsAudio.playClick();
+    if (!scr_test_overlay) return;
+    s_scr_test_step = 0;
+    lv_obj_clear_flag(scr_test_overlay, LV_OBJ_FLAG_HIDDEN);
+    scr_test_next_step();
+}
+
 static void btn_audio_test_cb(lv_event_t *e) {
     BmsAudio.playTestMelody();
 }
@@ -834,6 +838,15 @@ static void btn_wifi_scan_cb(lv_event_t *e) {
     }
 }
 
+static void btn_wifi_ap_cb(lv_event_t *e) {
+    if (s_sound_enabled) BmsAudio.playClick();
+    Gateway.startAP();
+    if (lbl_wifi_scan_res) {
+        lv_label_set_text(lbl_wifi_scan_res, "AP Started: 'BMS-Display-AP'\nPass: 12345678 (IP: 192.168.4.1)");
+        lv_obj_set_style_text_color(lbl_wifi_scan_res, lv_color_hex(CLR_EMERALD), 0);
+    }
+}
+
 static void dropdown_delta_thresh_cb(lv_event_t *e) {
     lv_obj_t *dd = lv_event_get_target(e);
     uint16_t sel = lv_dropdown_get_selected(dd);
@@ -853,8 +866,8 @@ static void create_settings_tab() {
     lv_obj_set_style_bg_color(tab_settings, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_settings, 6, 0);
 
-    // 1. Display & Brightness Card (Enlarged to 186px for Timeout + Sleep Mode Dropdowns)
-    lv_obj_t *card_disp = create_glass_card(tab_settings, 308, 186);
+    // 1. Display & Brightness Card (Enlarged to 226px for Screen Colors Test button)
+    lv_obj_t *card_disp = create_glass_card(tab_settings, 308, 226);
     lv_obj_align(card_disp, LV_ALIGN_TOP_MID, 0, 0);
 
     lv_obj_t *lbl_disp_title = lv_label_create(card_disp);
@@ -918,7 +931,8 @@ static void create_settings_tab() {
         "Screen Off 100% (Dark)\n"
         "Dim 15% (Night Glow)\n"
         "Clock Screensaver\n"
-        "Energy Orb HUD"
+        "Energy Orb HUD\n"
+        "Matrix Rain HUD"
     );
     lv_dropdown_set_selected(dropdown_sleep_mode, 2); // Default: Clock Screensaver
     lv_obj_set_style_bg_color(dropdown_sleep_mode, lv_color_hex(CLR_PANEL_INNER), 0);
@@ -928,9 +942,25 @@ static void create_settings_tab() {
     lv_obj_set_style_radius(dropdown_sleep_mode, 8, 0);
     lv_obj_add_event_cb(dropdown_sleep_mode, dropdown_sleep_mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // 2. Audio & Notifications Card (Enlarged to 88px for Test Audio button)
+    // Button: Test Screen Colors (Red, Green, Blue, White, Black full screen cycle)
+    lv_obj_t *btn_screen_test = lv_btn_create(card_disp);
+    lv_obj_set_size(btn_screen_test, 280, 32);
+    lv_obj_set_pos(btn_screen_test, 6, 160);
+    lv_obj_set_style_bg_color(btn_screen_test, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_screen_test, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_border_width(btn_screen_test, 1, 0);
+    lv_obj_set_style_radius(btn_screen_test, 8, 0);
+    lv_obj_add_event_cb(btn_screen_test, btn_screen_test_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_btn_scr_test = lv_label_create(btn_screen_test);
+    lv_label_set_text(lbl_btn_scr_test, LV_SYMBOL_IMAGE " TEST SCREEN COLORS (RGBW)");
+    lv_obj_set_style_text_color(lbl_btn_scr_test, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_btn_scr_test, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_btn_scr_test, LV_ALIGN_CENTER, 0, 0);
+
+    // 2. Audio & Notifications Card (Moved down to 234px)
     lv_obj_t *card_audio = create_glass_card(tab_settings, 308, 88);
-    lv_obj_align(card_audio, LV_ALIGN_TOP_MID, 0, 192);
+    lv_obj_align(card_audio, LV_ALIGN_TOP_MID, 0, 234);
 
     lv_obj_t *lbl_audio_title = lv_label_create(card_audio);
     lv_label_set_text(lbl_audio_title, LV_SYMBOL_AUDIO " SOUND & FEEDBACK");
@@ -960,9 +990,9 @@ static void create_settings_tab() {
     lv_obj_set_style_text_font(lbl_audio_btn, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_audio_btn, LV_ALIGN_CENTER, 0, 0);
 
-    // 3. Simulation & Protection Thresholds Card (116px)
+    // 3. Simulation & Protection Thresholds Card (116px, moved to 328)
     lv_obj_t *card_sim = create_glass_card(tab_settings, 308, 116);
-    lv_obj_align(card_sim, LV_ALIGN_TOP_MID, 0, 286);
+    lv_obj_align(card_sim, LV_ALIGN_TOP_MID, 0, 328);
 
     lv_obj_t *lbl_sim_title = lv_label_create(card_sim);
     lv_label_set_text(lbl_sim_title, LV_SYMBOL_REFRESH " SIMULATION & ALARM LIMITS");
@@ -1006,19 +1036,20 @@ static void create_settings_tab() {
     lv_obj_set_style_radius(dropdown_delta_thresh, 8, 0);
     lv_obj_add_event_cb(dropdown_delta_thresh, dropdown_delta_thresh_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // 4. Wi-Fi Scanner & Network Card (126px)
-    lv_obj_t *card_wifi = create_glass_card(tab_settings, 308, 126);
-    lv_obj_align(card_wifi, LV_ALIGN_TOP_MID, 0, 408);
+    // 4. Wi-Fi Scanner & Network Card (136px, moved to 450)
+    lv_obj_t *card_wifi = create_glass_card(tab_settings, 308, 136);
+    lv_obj_align(card_wifi, LV_ALIGN_TOP_MID, 0, 450);
 
     lv_obj_t *lbl_wifi_title = lv_label_create(card_wifi);
-    lv_label_set_text(lbl_wifi_title, LV_SYMBOL_WIFI " WI-FI SCANNER");
+    lv_label_set_text(lbl_wifi_title, LV_SYMBOL_WIFI " WI-FI CONTROL");
     lv_obj_set_style_text_color(lbl_wifi_title, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_wifi_title, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_wifi_title, LV_ALIGN_TOP_LEFT, 2, 2);
 
+    // Scan Button
     lv_obj_t *btn_wifi_scan = lv_btn_create(card_wifi);
-    lv_obj_set_size(btn_wifi_scan, 110, 26);
-    lv_obj_align(btn_wifi_scan, LV_ALIGN_TOP_RIGHT, -4, 0);
+    lv_obj_set_size(btn_wifi_scan, 80, 26);
+    lv_obj_align(btn_wifi_scan, LV_ALIGN_TOP_RIGHT, -94, 0);
     lv_obj_set_style_bg_color(btn_wifi_scan, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_wifi_scan, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_border_width(btn_wifi_scan, 1, 0);
@@ -1031,15 +1062,31 @@ static void create_settings_tab() {
     lv_obj_set_style_text_font(lbl_btn_scan, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_btn_scan, LV_ALIGN_CENTER, 0, 0);
 
+    // Start AP Hotspot Button
+    lv_obj_t *btn_wifi_ap = lv_btn_create(card_wifi);
+    lv_obj_set_size(btn_wifi_ap, 88, 26);
+    lv_obj_align(btn_wifi_ap, LV_ALIGN_TOP_RIGHT, -2, 0);
+    lv_obj_set_style_bg_color(btn_wifi_ap, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_wifi_ap, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_border_width(btn_wifi_ap, 1, 0);
+    lv_obj_set_style_radius(btn_wifi_ap, 6, 0);
+    lv_obj_add_event_cb(btn_wifi_ap, btn_wifi_ap_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_btn_ap = lv_label_create(btn_wifi_ap);
+    lv_label_set_text(lbl_btn_ap, LV_SYMBOL_WIFI " AP MODE");
+    lv_obj_set_style_text_color(lbl_btn_ap, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_btn_ap, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_btn_ap, LV_ALIGN_CENTER, 0, 0);
+
     lbl_wifi_scan_res = lv_label_create(card_wifi);
-    lv_label_set_text(lbl_wifi_scan_res, "Click SCAN to discover nearby Wi-Fi networks");
+    lv_label_set_text(lbl_wifi_scan_res, "Scan nets or tap AP MODE to reconfigure Wi-Fi");
     lv_obj_set_style_text_color(lbl_wifi_scan_res, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_wifi_scan_res, &lv_font_montserrat_10, 0);
     lv_obj_set_pos(lbl_wifi_scan_res, 4, 30);
 
-    // 5. System & Network Diagnostics Card (140px)
+    // 5. System & Network Diagnostics Card (140px, moved to 592)
     lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 140);
-    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 540);
+    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 592);
 
     lv_obj_t *lbl_sys_title = lv_label_create(card_sys);
     lv_label_set_text(lbl_sys_title, LV_SYMBOL_SETTINGS " HARDWARE SPECIFICATION");
@@ -1060,134 +1107,6 @@ static void create_settings_tab() {
     lv_obj_set_style_text_color(lbl_info, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_info, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_info, LV_ALIGN_TOP_LEFT, 4, 22);
-}
-
-static void create_charts_tab() {
-    tab_charts = lv_tabview_add_tab(tabview, "Charts");
-    lv_obj_set_style_bg_color(tab_charts, lv_color_hex(CLR_DARK_BG), 0);
-    lv_obj_set_style_pad_all(tab_charts, 6, 0);
-
-    // 1. Live Active Power & Current Chart Card (205px)
-    lv_obj_t *card_pwr_chart = create_glass_card(tab_charts, 308, 205);
-    lv_obj_align(card_pwr_chart, LV_ALIGN_TOP_MID, 0, 0);
-
-    lv_obj_t *lbl_pwr_title = lv_label_create(card_pwr_chart);
-    lv_label_set_text(lbl_pwr_title, LV_SYMBOL_CHARGE " POWER & CURRENT TREND");
-    lv_obj_set_style_text_color(lbl_pwr_title, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_pwr_title, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_LEFT, 2, 0);
-
-    lbl_chart_pwr_val = lv_label_create(card_pwr_chart);
-    lv_label_set_text(lbl_chart_pwr_val, "0.00 kW | 0.0 A");
-    lv_obj_set_style_text_color(lbl_chart_pwr_val, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_chart_pwr_val, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_chart_pwr_val, LV_ALIGN_TOP_RIGHT, -4, 0);
-
-    chart_pwr = lv_chart_create(card_pwr_chart);
-    lv_obj_set_size(chart_pwr, 284, 155);
-    lv_obj_set_pos(chart_pwr, 4, 24);
-    lv_chart_set_type(chart_pwr, LV_CHART_TYPE_LINE);
-    lv_chart_set_update_mode(chart_pwr, LV_CHART_UPDATE_MODE_SHIFT);
-    lv_chart_set_point_count(chart_pwr, 30); // 30 data points
-    lv_chart_set_range(chart_pwr, LV_CHART_AXIS_PRIMARY_Y, -100, 100); // Scaled for kW * 10
-    lv_obj_set_style_bg_color(chart_pwr, lv_color_hex(0x020617), 0);
-    lv_obj_set_style_border_color(chart_pwr, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_border_width(chart_pwr, 1, 0);
-    lv_obj_set_style_radius(chart_pwr, 8, 0);
-    lv_obj_set_style_pad_all(chart_pwr, 2, 0);
-
-    ser_pwr = lv_chart_add_series(chart_pwr, lv_color_hex(CLR_CYAN), LV_CHART_AXIS_PRIMARY_Y);
-    ser_cur = lv_chart_add_series(chart_pwr, lv_color_hex(CLR_AMBER), LV_CHART_AXIS_PRIMARY_Y);
-
-    // 2. Cell Delta Imbalance Chart Card (205px)
-    lv_obj_t *card_delta_chart = create_glass_card(tab_charts, 308, 205);
-    lv_obj_align(card_delta_chart, LV_ALIGN_TOP_MID, 0, 212);
-
-    lv_obj_t *lbl_delta_title = lv_label_create(card_delta_chart);
-    lv_label_set_text(lbl_delta_title, LV_SYMBOL_WARNING " CELL DELTA (mV) TREND");
-    lv_obj_set_style_text_color(lbl_delta_title, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_delta_title, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_delta_title, LV_ALIGN_TOP_LEFT, 2, 0);
-
-    lbl_chart_delta_val = lv_label_create(card_delta_chart);
-    lv_label_set_text(lbl_chart_delta_val, "Delta: 0 mV");
-    lv_obj_set_style_text_color(lbl_chart_delta_val, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_chart_delta_val, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_chart_delta_val, LV_ALIGN_TOP_RIGHT, -4, 0);
-
-    chart_delta = lv_chart_create(card_delta_chart);
-    lv_obj_set_size(chart_delta, 284, 155);
-    lv_obj_set_pos(chart_delta, 4, 24);
-    lv_chart_set_type(chart_delta, LV_CHART_TYPE_LINE);
-    lv_chart_set_update_mode(chart_delta, LV_CHART_UPDATE_MODE_SHIFT);
-    lv_chart_set_point_count(chart_delta, 30);
-    lv_chart_set_range(chart_delta, LV_CHART_AXIS_PRIMARY_Y, 0, 150); // 0 to 150 mV range
-    lv_obj_set_style_bg_color(chart_delta, lv_color_hex(0x020617), 0);
-    lv_obj_set_style_border_color(chart_delta, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_border_width(chart_delta, 1, 0);
-    lv_obj_set_style_radius(chart_delta, 8, 0);
-    lv_obj_set_style_pad_all(chart_delta, 2, 0);
-
-    ser_delta = lv_chart_add_series(chart_delta, lv_color_hex(CLR_EMERALD), LV_CHART_AXIS_PRIMARY_Y);
-}
-
-static void create_matrix_tab() {
-    tab_matrix = lv_tabview_add_tab(tabview, "Matrix");
-    lv_obj_set_style_bg_color(tab_matrix, lv_color_hex(CLR_DARK_BG), 0);
-    lv_obj_set_style_pad_all(tab_matrix, 6, 0);
-
-    // Top Diagnostic Card (54px)
-    lv_obj_t *top_card = create_glass_card(tab_matrix, 308, 54);
-    lv_obj_align(top_card, LV_ALIGN_TOP_MID, 0, 0);
-
-    lv_obj_t *lbl_title = lv_label_create(top_card);
-    lv_label_set_text(lbl_title, LV_SYMBOL_SHUFFLE " PARALLEL PACKS CURRENT & HEALTH");
-    lv_obj_set_style_text_color(lbl_title, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 2, 0);
-
-    lbl_matrix_diag = lv_label_create(top_card);
-    lv_label_set_text(lbl_matrix_diag, "Current Balance: Optimal (All packs synced)");
-    lv_obj_set_style_text_color(lbl_matrix_diag, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_matrix_diag, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_matrix_diag, LV_ALIGN_BOTTOM_LEFT, 2, 0);
-
-    // 4 Comparison Cards for Packs P1 .. P4 (86px each)
-    for (int p = 0; p < MAX_BATTERIES; p++) {
-        matrix_pack_cards[p] = create_glass_card(tab_matrix, 308, 86);
-        lv_obj_align(matrix_pack_cards[p], LV_ALIGN_TOP_MID, 0, 60 + p * 92);
-        lv_obj_set_style_pad_all(matrix_pack_cards[p], 4, 0);
-
-        lbl_matrix_title[p] = lv_label_create(matrix_pack_cards[p]);
-        char tBuf[32];
-        snprintf(tBuf, sizeof(tBuf), "BATTERY PACK #%02d", p + 1);
-        lv_label_set_text(lbl_matrix_title[p], tBuf);
-        lv_obj_set_style_text_color(lbl_matrix_title[p], lv_color_hex(CLR_CYAN), 0);
-        lv_obj_set_style_text_font(lbl_matrix_title[p], &lv_font_montserrat_12, 0);
-        lv_obj_align(lbl_matrix_title[p], LV_ALIGN_TOP_LEFT, 2, 2);
-
-        lbl_matrix_cur[p] = lv_label_create(matrix_pack_cards[p]);
-        lv_label_set_text(lbl_matrix_cur[p], "0.0 A (0%)");
-        lv_obj_set_style_text_color(lbl_matrix_cur[p], lv_color_white(), 0);
-        lv_obj_set_style_text_font(lbl_matrix_cur[p], &lv_font_montserrat_12, 0);
-        lv_obj_align(lbl_matrix_cur[p], LV_ALIGN_TOP_RIGHT, -4, 2);
-
-        // Visual Current Distribution Bar
-        bar_matrix_cur[p] = lv_bar_create(matrix_pack_cards[p]);
-        lv_obj_set_size(bar_matrix_cur[p], 288, 10);
-        lv_obj_set_pos(bar_matrix_cur[p], 4, 28);
-        lv_bar_set_range(bar_matrix_cur[p], 0, 100);
-        lv_bar_set_value(bar_matrix_cur[p], 25, LV_ANIM_OFF);
-        lv_obj_set_style_bg_color(bar_matrix_cur[p], lv_color_hex(CLR_PANEL_INNER), 0);
-        lv_obj_set_style_bg_color(bar_matrix_cur[p], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
-        lv_obj_set_style_radius(bar_matrix_cur[p], 4, 0);
-
-        lbl_matrix_health[p] = lv_label_create(matrix_pack_cards[p]);
-        lv_label_set_text(lbl_matrix_health[p], "SOC: --% | SoH: 100% | Cycles: 0 | Delta: --mV");
-        lv_obj_set_style_text_color(lbl_matrix_health[p], lv_color_hex(CLR_TEXT_MUTED), 0);
-        lv_obj_set_style_text_font(lbl_matrix_health[p], &lv_font_montserrat_10, 0);
-        lv_obj_align(lbl_matrix_health[p], LV_ALIGN_BOTTOM_LEFT, 2, -2);
-    }
 }
 
 static void create_logs_tab() {
@@ -1286,10 +1205,10 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_nav_settings, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_nav_settings, LV_ALIGN_CENTER, 0, 0);
 
-    // 2. Button "Home" - 38x28
+    // 2. Button "Home" - 40x28
     btn_nav_all = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_all, 38, 28);
-    lv_obj_align(btn_nav_all, LV_ALIGN_LEFT_MID, 34, 0);
+    lv_obj_set_size(btn_nav_all, 40, 28);
+    lv_obj_align(btn_nav_all, LV_ALIGN_LEFT_MID, 36, 0);
     lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(0x164E63), 0);
     lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_border_width(btn_nav_all, 1, 0);
@@ -1303,44 +1222,10 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_nav_all, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_nav_all, LV_ALIGN_CENTER, 0, 0);
 
-    // 3. Button "Chart" - 38x28
-    btn_nav_charts = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_charts, 38, 28);
-    lv_obj_align(btn_nav_charts, LV_ALIGN_LEFT_MID, 74, 0);
-    lv_obj_set_style_bg_color(btn_nav_charts, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_border_color(btn_nav_charts, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_border_width(btn_nav_charts, 1, 0);
-    lv_obj_set_style_radius(btn_nav_charts, 6, 0);
-    lv_obj_set_style_pad_all(btn_nav_charts, 0, 0);
-    lv_obj_add_event_cb(btn_nav_charts, nav_charts_click_cb, LV_EVENT_CLICKED, NULL);
-
-    lbl_nav_charts = lv_label_create(btn_nav_charts);
-    lv_label_set_text(lbl_nav_charts, "Chart");
-    lv_obj_set_style_text_color(lbl_nav_charts, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(lbl_nav_charts, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_nav_charts, LV_ALIGN_CENTER, 0, 0);
-
-    // 4. Button "Matrix" - 40x28
-    btn_nav_matrix = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_matrix, 40, 28);
-    lv_obj_align(btn_nav_matrix, LV_ALIGN_LEFT_MID, 114, 0);
-    lv_obj_set_style_bg_color(btn_nav_matrix, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_border_color(btn_nav_matrix, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_border_width(btn_nav_matrix, 1, 0);
-    lv_obj_set_style_radius(btn_nav_matrix, 6, 0);
-    lv_obj_set_style_pad_all(btn_nav_matrix, 0, 0);
-    lv_obj_add_event_cb(btn_nav_matrix, nav_matrix_click_cb, LV_EVENT_CLICKED, NULL);
-
-    lbl_nav_matrix = lv_label_create(btn_nav_matrix);
-    lv_label_set_text(lbl_nav_matrix, "Matrix");
-    lv_obj_set_style_text_color(lbl_nav_matrix, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(lbl_nav_matrix, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_nav_matrix, LV_ALIGN_CENTER, 0, 0);
-
-    // 5. Button "Logs" - 36x28
+    // 3. Button "Logs" - 38x28
     btn_nav_logs = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_logs, 36, 28);
-    lv_obj_align(btn_nav_logs, LV_ALIGN_LEFT_MID, 156, 0);
+    lv_obj_set_size(btn_nav_logs, 38, 28);
+    lv_obj_align(btn_nav_logs, LV_ALIGN_LEFT_MID, 79, 0);
     lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_logs, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(btn_nav_logs, 1, 0);
@@ -1354,19 +1239,41 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_nav_logs, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_nav_logs, LV_ALIGN_CENTER, 0, 0);
 
+    // Center: Real-time NTP Clock (e.g. "14:18") - font 14px, shifted right to 142
+    lbl_top_clock = lv_label_create(top_nav_bar);
+    lv_label_set_text(lbl_top_clock, "--:--");
+    lv_obj_set_style_text_color(lbl_top_clock, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_top_clock, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_top_clock, LV_ALIGN_LEFT_MID, 142, 0);
+
     // Right Side: Power Source Icon (USB) - fixed position at far right
     lbl_top_power_src = lv_label_create(top_nav_bar);
     lv_label_set_text(lbl_top_power_src, LV_SYMBOL_USB);
     lv_obj_set_style_text_color(lbl_top_power_src, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_top_power_src, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(lbl_top_power_src, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_top_power_src, LV_ALIGN_RIGHT_MID, -2, 0);
 
-    // Right Side: IP + Wi-Fi RSSI (Larger Font 12px, moved comfortably left of USB icon)
+    // Right Side: Dynamic Wi-Fi Signal Antenna (4 vertical bars)
+    // Placed between IP and USB icon, with clear 6px spacing from USB
+    static const uint8_t bar_heights[4] = {3, 6, 9, 12};
+    for (int b = 0; b < 4; b++) {
+        wifi_bar_obj[b] = lv_obj_create(top_nav_bar);
+        lv_obj_set_size(wifi_bar_obj[b], 3, bar_heights[b]);
+        lv_obj_align(wifi_bar_obj[b], LV_ALIGN_BOTTOM_RIGHT, -34 + (b * 4), -8);
+        lv_obj_set_style_bg_color(wifi_bar_obj[b], lv_color_hex(0x334155), 0);
+        lv_obj_set_style_bg_opa(wifi_bar_obj[b], LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(wifi_bar_obj[b], 0, 0);
+        lv_obj_set_style_radius(wifi_bar_obj[b], 1, 0);
+        lv_obj_set_style_pad_all(wifi_bar_obj[b], 0, 0);
+        lv_obj_clear_flag(wifi_bar_obj[b], LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    }
+
+    // Right Side: IP Address - font 14px, shifted left to -50
     lbl_top_ip = lv_label_create(top_nav_bar);
     lv_label_set_text(lbl_top_ip, "...");
     lv_obj_set_style_text_color(lbl_top_ip, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -30, 0);
+    lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -50, 0);
 
     // Create TabView with tab_size = 0 (completely disables default button matrix header!)
     tabview = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 0);
@@ -1383,22 +1290,14 @@ static void build_ui() {
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_overview, 6, 0);
 
-    // Create Live Dynamic Charts Tab (Tab 2)
-    create_charts_tab();
-    s_charts_tab_index = 2;
-
-    // Create Health Matrix Tab (Tab 3)
-    create_matrix_tab();
-    s_matrix_tab_index = 3;
-
-    // Create Initial Battery Pack Tabs (Tabs 4 .. 4+N-1)
+    // Create Initial Battery Pack Tabs (Tabs 2 .. 2+N-1)
     for (uint8_t i = 0; i < s_active_pack_count; i++) {
         create_battery_tab(i);
     }
 
     // Create Dedicated Logs Tab as the LAST Tab
     create_logs_tab();
-    s_logs_tab_index = 4 + s_active_pack_count;
+    s_logs_tab_index = 2 + s_active_pack_count;
 
     // Default active tab is "Home" (Tab 1)
     lv_tabview_set_act(tabview, 1, LV_ANIM_OFF);
@@ -1688,13 +1587,44 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_eta_val, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_eta_val, LV_ALIGN_RIGHT_MID, -6, 0);
 
-    // 6. Clean SD Log Card at Bottom (38px)
-    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 38);
-    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 390);
+    // 6. Energy Trip Meter Card (Session charged / discharged kWh) - 34px
+    card_trip_meter = create_glass_card(tab_overview, 308, 34);
+    lv_obj_align(card_trip_meter, LV_ALIGN_TOP_MID, 0, 390);
+    lv_obj_set_style_pad_all(card_trip_meter, 3, 0);
+    lv_obj_set_style_bg_color(card_trip_meter, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(card_trip_meter, lv_color_hex(CLR_BORDER), 0);
+
+    lv_obj_t *lbl_trip_icon = lv_label_create(card_trip_meter);
+    lv_label_set_text(lbl_trip_icon, LV_SYMBOL_REFRESH);
+    lv_obj_set_style_text_color(lbl_trip_icon, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_trip_icon, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_trip_icon, LV_ALIGN_LEFT_MID, 4, 0);
+
+    lv_obj_t *lbl_trip_title = lv_label_create(card_trip_meter);
+    lv_label_set_text(lbl_trip_title, "TRIP:");
+    lv_obj_set_style_text_color(lbl_trip_title, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_trip_title, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_trip_title, LV_ALIGN_LEFT_MID, 22, 0);
+
+    lbl_trip_chg = lv_label_create(card_trip_meter);
+    lv_label_set_text(lbl_trip_chg, "IN +0.00 kWh");
+    lv_obj_set_style_text_color(lbl_trip_chg, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_trip_chg, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_trip_chg, LV_ALIGN_LEFT_MID, 60, 0);
+
+    lbl_trip_disch = lv_label_create(card_trip_meter);
+    lv_label_set_text(lbl_trip_disch, "OUT -0.00 kWh");
+    lv_obj_set_style_text_color(lbl_trip_disch, lv_color_hex(CLR_BLUE), 0);
+    lv_obj_set_style_text_font(lbl_trip_disch, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_trip_disch, LV_ALIGN_RIGHT_MID, -6, 0);
+
+    // 7. Clean SD Log Card at Bottom (34px, moved to y=428)
+    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 34);
+    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 428);
     lv_obj_set_style_pad_all(info_card, 2, 0);
 
     btn_bank_log = lv_btn_create(info_card);
-    lv_obj_set_size(btn_bank_log, 300, 32);
+    lv_obj_set_size(btn_bank_log, 300, 28);
     lv_obj_align(btn_bank_log, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_bank_log, lv_color_hex(CLR_BORDER), 0);
@@ -1812,12 +1742,63 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_ss_orb_pwr, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_ss_orb_pwr, LV_ALIGN_CENTER, 0, 36);
 
+    // Matrix Rain Screensaver Cluster (Fullscreen 320x440)
+    ss_matrix_cluster = lv_obj_create(screensaver_overlay);
+    lv_obj_set_size(ss_matrix_cluster, 320, 440);
+    lv_obj_set_pos(ss_matrix_cluster, 0, 0);
+    lv_obj_set_style_bg_opa(ss_matrix_cluster, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(ss_matrix_cluster, 0, 0);
+    lv_obj_set_style_pad_all(ss_matrix_cluster, 0, 0);
+    lv_obj_clear_flag(ss_matrix_cluster, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(ss_matrix_cluster, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(ss_matrix_cluster, LV_OBJ_FLAG_HIDDEN); // Hidden unless in MATRIX mode
+
+    // Matrix Rain Top Terminal Header
+    lv_obj_t *lbl_mat_head = lv_label_create(ss_matrix_cluster);
+    lv_label_set_text(lbl_mat_head, "CYBER BMS MATRIX // LIVE CELL STREAM");
+    lv_obj_set_style_text_color(lbl_mat_head, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_mat_head, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_mat_head, LV_ALIGN_TOP_MID, 0, 8);
+
+    // 6 Vertical falling columns for cells telemetry stream
+    for (int col = 0; col < 6; col++) {
+        lbl_matrix_rain_cols[col] = lv_label_create(ss_matrix_cluster);
+        lv_label_set_text(lbl_matrix_rain_cols[col], "3.328\n3.329\n3.327\n3.330\n3.328\n3.326\n3.329\n3.328");
+        lv_obj_set_style_text_color(lbl_matrix_rain_cols[col], lv_color_hex(CLR_EMERALD), 0);
+        lv_obj_set_style_text_font(lbl_matrix_rain_cols[col], &lv_font_montserrat_10, 0);
+        lv_obj_set_pos(lbl_matrix_rain_cols[col], 10 + col * 52, 28);
+        s_matrix_rain_offset[col] = col * 3;
+    }
+
     // Hint at bottom
     lv_obj_t *lbl_ss_hint = lv_label_create(screensaver_overlay);
     lv_label_set_text(lbl_ss_hint, "Tap anywhere to wake up");
     lv_obj_set_style_text_color(lbl_ss_hint, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_ss_hint, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_ss_hint, LV_ALIGN_BOTTOM_MID, 0, -18);
+
+    // 7. Fullscreen Screen Colors Test Overlay (Top layer)
+    scr_test_overlay = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(scr_test_overlay, 320, 480);
+    lv_obj_set_pos(scr_test_overlay, 0, 0);
+    lv_obj_set_style_bg_color(scr_test_overlay, lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_bg_opa(scr_test_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(scr_test_overlay, 0, 0);
+    lv_obj_set_style_radius(scr_test_overlay, 0, 0);
+    lv_obj_set_style_pad_all(scr_test_overlay, 0, 0);
+    lv_obj_clear_flag(scr_test_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(scr_test_overlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(scr_test_overlay, LV_OBJ_FLAG_HIDDEN); // Hidden by default
+
+    lbl_scr_test_hint = lv_label_create(scr_test_overlay);
+    lv_label_set_text(lbl_scr_test_hint, "RED (Tap for next)");
+    lv_obj_set_style_text_color(lbl_scr_test_hint, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_scr_test_hint, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_scr_test_hint, LV_ALIGN_BOTTOM_MID, 0, -20);
+
+    lv_obj_add_event_cb(scr_test_overlay, [](lv_event_t *e) {
+        scr_test_next_step();
+    }, LV_EVENT_CLICKED, NULL);
 }
 
 static void update_ui() {
@@ -1897,14 +1878,34 @@ static void update_ui() {
         }
     }
 
+    // Wi-Fi Status & Dynamic Antenna Signal Bars
+    uint8_t active_bars = 0;
     if (Gateway.isConnected()) {
-        char ip_str[36];
-        snprintf(ip_str, sizeof(ip_str), "%s %ddBm", Gateway.getIpAddress().c_str(), Gateway.getRssi());
-        lv_label_set_text(lbl_top_ip, ip_str);
+        lv_label_set_text(lbl_top_ip, Gateway.getIpAddress().c_str());
+        int rssi = Gateway.getRssi();
+        if (rssi >= -60) active_bars = 4;       // Excellent
+        else if (rssi >= -70) active_bars = 3;  // Good
+        else if (rssi >= -80) active_bars = 2;  // Fair
+        else active_bars = 1;                   // Weak
     } else if (Gateway.isAPMode()) {
-        lv_label_set_text(lbl_top_ip, "192.168.4.1");
+        lv_label_set_text(lbl_top_ip, "192.168.4.1 (AP)");
+        active_bars = 4; // AP mode broadcast active
     } else {
-        lv_label_set_text(lbl_top_ip, "Wi-Fi: ...");
+        lv_label_set_text(lbl_top_ip, "Offline");
+        active_bars = 0; // Disconnected
+    }
+
+    for (int b = 0; b < 4; b++) {
+        if (wifi_bar_obj[b]) {
+            if (b < active_bars) {
+                // Lit bar: Emerald green for strong, amber for weak (1 bar)
+                uint32_t bar_clr = (active_bars == 1) ? CLR_AMBER : CLR_EMERALD;
+                lv_obj_set_style_bg_color(wifi_bar_obj[b], lv_color_hex(bar_clr), 0);
+            } else {
+                // Inactive dim bar
+                lv_obj_set_style_bg_color(wifi_bar_obj[b], lv_color_hex(0x334155), 0);
+            }
+        }
     }
 
     // Power source indication (compact symbol only)
@@ -2153,6 +2154,31 @@ static void update_ui() {
         }
     }
 
+    // Update Energy Trip Meter (Integrate power over time in kWh)
+    if (card_trip_meter && lbl_trip_chg && lbl_trip_disch) {
+        static uint32_t lastTripCalc = 0;
+        uint32_t nowMs = millis();
+        if (lastTripCalc == 0) lastTripCalc = nowMs;
+        float dtHours = (float)(nowMs - lastTripCalc) / 3600000.0f;
+        lastTripCalc = nowMs;
+
+        if (dtHours > 0.0f && dtHours < 0.1f) {
+            if (totalPwrKw > 0.01f) {
+                s_energy_charge_kwh += (totalPwrKw * dtHours);
+            } else if (totalPwrKw < -0.01f) {
+                s_energy_discharge_kwh += (fabsf(totalPwrKw) * dtHours);
+            }
+        }
+
+        char chgBuf[32];
+        snprintf(chgBuf, sizeof(chgBuf), "IN +%.2f kWh", s_energy_charge_kwh);
+        lv_label_set_text(lbl_trip_chg, chgBuf);
+
+        char dischBuf[32];
+        snprintf(dischBuf, sizeof(dischBuf), "OUT -%.2f kWh", s_energy_discharge_kwh);
+        lv_label_set_text(lbl_trip_disch, dischBuf);
+    }
+
     // Update live values on Screensaver glance overlay
     if (screensaver_overlay) {
         char ssBuf[36];
@@ -2271,6 +2297,11 @@ static void update_ui() {
             lv_label_set_text(ui.lbl_log_btn, "START REC (SD)");
             lv_obj_set_style_bg_color(ui.btn_log, lv_color_hex(CLR_PANEL_INNER), 0);
         }
+
+        // Update cycles count label
+        char cycBuf[16];
+        snprintf(cycBuf, sizeof(cycBuf), "%u cyc", p.cycles);
+        lv_label_set_text(ui.lbl_cycles, cycBuf);
 
         if (pHasAlarm) {
             lv_label_set_text(ui.lbl_status, "ALARM");
@@ -2402,102 +2433,6 @@ static void update_ui() {
             }
         }
     }
-
-    // Update Live Charts (every ~1s sampling)
-    static uint32_t last_chart_sample_ms = 0;
-    if (chart_pwr && chart_delta && (millis() - last_chart_sample_ms >= 1000)) {
-        last_chart_sample_ms = millis();
-
-        // 1. Power (kW * 10) & Current (Amps)
-        int16_t pwrVal = (int16_t)(totalPwrKw * 10.0f); // e.g. 3.2 kW = 32
-        int16_t curVal = (int16_t)iSum;                 // e.g. 59 A
-        lv_chart_set_next_value(chart_pwr, ser_pwr, pwrVal);
-        lv_chart_set_next_value(chart_pwr, ser_cur, curVal);
-
-        if (lbl_chart_pwr_val) {
-            char pwrValBuf[36];
-            snprintf(pwrValBuf, sizeof(pwrValBuf), "%+.2fkW | %+.1fA", totalPwrKw, iSum);
-            lv_label_set_text(lbl_chart_pwr_val, pwrValBuf);
-        }
-
-        // 2. Cell Delta (mV)
-        int16_t deltaVal = (int16_t)globalDeltaMv;
-        lv_chart_set_next_value(chart_delta, ser_delta, deltaVal);
-
-        if (lbl_chart_delta_val) {
-            char deltaValBuf[32];
-            snprintf(deltaValBuf, sizeof(deltaValBuf), "Delta: %u mV", globalDeltaMv);
-            lv_label_set_text(lbl_chart_delta_val, deltaValBuf);
-            if (globalDeltaMv > 50) {
-                lv_obj_set_style_text_color(lbl_chart_delta_val, lv_color_hex(CLR_ROSE), 0);
-            } else {
-                lv_obj_set_style_text_color(lbl_chart_delta_val, lv_color_white(), 0);
-            }
-        }
-    }
-
-    // Update Health & Current Distribution Matrix
-    if (tab_matrix) {
-        float maxCur = 0.01f;
-        float minCur = 999.0f;
-        uint8_t onlineCnt = 0;
-
-        for (int p = 0; p < MAX_BATTERIES; p++) {
-            if (local_packs[p].isOnline && matrix_pack_cards[p]) {
-                onlineCnt++;
-                float pCur = fabsf(local_packs[p].current);
-                if (pCur > maxCur) maxCur = pCur;
-                if (pCur < minCur) minCur = pCur;
-
-                // Percentage share of total current
-                int curShare = 0;
-                float totAbs = fabsf(iSum);
-                if (totAbs > 0.5f) {
-                    curShare = (int)((pCur / totAbs) * 100.0f);
-                } else {
-                    curShare = (onlineCnt > 0) ? (100 / onlineCnt) : 25;
-                }
-                if (curShare > 100) curShare = 100;
-
-                char cBuf[32];
-                snprintf(cBuf, sizeof(cBuf), "%+.1f A (%d%%)", local_packs[p].current, curShare);
-                lv_label_set_text(lbl_matrix_cur[p], cBuf);
-                lv_bar_set_value(bar_matrix_cur[p], curShare, LV_ANIM_OFF);
-
-                // Health string
-                char hBuf[64];
-                snprintf(hBuf, sizeof(hBuf), "SOC: %u%% | SoH: 100%% | Cycles: %u | Diff: %u mV",
-                         local_packs[p].soc, local_packs[p].cycles, local_packs[p].cellDiff);
-                lv_label_set_text(lbl_matrix_health[p], hBuf);
-
-                if (local_packs[p].warningRaw || local_packs[p].protectionRaw || local_packs[p].errorRaw) {
-                    lv_obj_set_style_border_color(matrix_pack_cards[p], lv_color_hex(CLR_ROSE), 0);
-                    lv_obj_set_style_bg_color(bar_matrix_cur[p], lv_color_hex(CLR_ROSE), LV_PART_INDICATOR);
-                } else {
-                    lv_obj_set_style_border_color(matrix_pack_cards[p], lv_color_hex(CLR_BORDER), 0);
-                    lv_obj_set_style_bg_color(bar_matrix_cur[p], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
-                }
-            } else if (matrix_pack_cards[p]) {
-                lv_label_set_text(lbl_matrix_cur[p], "OFFLINE");
-                lv_bar_set_value(bar_matrix_cur[p], 0, LV_ANIM_OFF);
-                lv_label_set_text(lbl_matrix_health[p], "Pack not connected or no RS485 communication");
-                lv_obj_set_style_border_color(matrix_pack_cards[p], lv_color_hex(CLR_BORDER), 0);
-            }
-        }
-
-        // Global Diagnostic Check
-        if (lbl_matrix_diag) {
-            if (onlineCnt > 1 && fabsf(iSum) > 5.0f && (maxCur - minCur) > 8.0f) {
-                char dBuf[64];
-                snprintf(dBuf, sizeof(dBuf), "Current Imbalance: %.1fA diff! (Check bus cables)", maxCur - minCur);
-                lv_label_set_text(lbl_matrix_diag, dBuf);
-                lv_obj_set_style_text_color(lbl_matrix_diag, lv_color_hex(CLR_AMBER), 0);
-            } else {
-                lv_label_set_text(lbl_matrix_diag, "Parallel Bus Status: Symmetrical & Optimal");
-                lv_obj_set_style_text_color(lbl_matrix_diag, lv_color_hex(CLR_EMERALD), 0);
-            }
-        }
-    }
 }
 
 void sniffer_task(void *pvParameters) {
@@ -2597,28 +2532,32 @@ void loop() {
             set_backlight_brightness(0); // 100% Turn off backlight
         } else if (s_sleep_mode == SLEEP_MODE_DIM) {
             set_backlight_brightness(25); // Dim to ~15% night glow
-        } else if (s_sleep_mode == SLEEP_MODE_SAVER || s_sleep_mode == SLEEP_MODE_ORB) {
+        } else if (s_sleep_mode >= SLEEP_MODE_SAVER) {
             set_backlight_brightness(35); // Low night glow for screensaver
             if (screensaver_overlay) {
                 lv_obj_clear_flag(screensaver_overlay, LV_OBJ_FLAG_HIDDEN);
+                if (screensaver_cluster) lv_obj_add_flag(screensaver_cluster, LV_OBJ_FLAG_HIDDEN);
+                if (ss_orb_cluster) lv_obj_add_flag(ss_orb_cluster, LV_OBJ_FLAG_HIDDEN);
+                if (ss_matrix_cluster) lv_obj_add_flag(ss_matrix_cluster, LV_OBJ_FLAG_HIDDEN);
+
                 if (s_sleep_mode == SLEEP_MODE_ORB) {
-                    if (screensaver_cluster) lv_obj_add_flag(screensaver_cluster, LV_OBJ_FLAG_HIDDEN);
                     if (ss_orb_cluster) lv_obj_clear_flag(ss_orb_cluster, LV_OBJ_FLAG_HIDDEN);
+                } else if (s_sleep_mode == SLEEP_MODE_MATRIX) {
+                    if (ss_matrix_cluster) lv_obj_clear_flag(ss_matrix_cluster, LV_OBJ_FLAG_HIDDEN);
                 } else {
-                    if (ss_orb_cluster) lv_obj_add_flag(ss_orb_cluster, LV_OBJ_FLAG_HIDDEN);
                     if (screensaver_cluster) lv_obj_clear_flag(screensaver_cluster, LV_OBJ_FLAG_HIDDEN);
                 }
             }
         }
     }
 
-    // Screensaver periodic floating/roaming & live time update
-    if (s_is_screen_dimmed && (s_sleep_mode == SLEEP_MODE_SAVER || s_sleep_mode == SLEEP_MODE_ORB) && screensaver_overlay) {
+    // Screensaver periodic floating/roaming, Matrix Rain streams & live time update
+    if (s_is_screen_dimmed && s_sleep_mode >= SLEEP_MODE_SAVER && screensaver_overlay) {
         static uint32_t last_ss_tick = 0;
         if (millis() - last_ss_tick >= 1000) {
             last_ss_tick = millis();
             
-            // Format real Kyiv local time if synced, otherwise fallback to uptime
+            // Periodic 1-second top nav clock update
             time_t now = time(nullptr);
             struct tm timeinfo;
             char tBuf[16];
@@ -2630,7 +2569,24 @@ void loop() {
                 uint32_t hr = (sec / 3600) % 24;
                 snprintf(tBuf, sizeof(tBuf), "%02u:%02u", hr, min);
             }
+            if (lbl_top_clock) lv_label_set_text(lbl_top_clock, tBuf);
             if (lbl_ss_time) lv_label_set_text(lbl_ss_time, tBuf);
+
+            // Matrix Rain Stream dynamic update
+            if (s_sleep_mode == SLEEP_MODE_MATRIX && ss_matrix_cluster) {
+                for (int col = 0; col < 6; col++) {
+                    s_matrix_rain_offset[col] = (s_matrix_rain_offset[col] + 1) % 16;
+                    String stream = "";
+                    for (int row = 0; row < 14; row++) {
+                        int cell_idx = (s_matrix_rain_offset[col] + row) % 16;
+                        uint16_t mv = 3300 + ((cell_idx * 17 + s_ss_burnin_step * 3) % 45);
+                        stream += String(mv / 1000.0f, 3) + "\n";
+                    }
+                    if (lbl_matrix_rain_cols[col]) {
+                        lv_label_set_text(lbl_matrix_rain_cols[col], stream.c_str());
+                    }
+                }
+            }
 
             // Dynamic random roaming motion across the screen every 10 seconds for burn-in protection!
             s_ss_burnin_step++;
