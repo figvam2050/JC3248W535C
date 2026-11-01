@@ -821,8 +821,8 @@ static void update_ui() {
     }
 
     if (Gateway.isConnected()) {
-        char ip_str[32];
-        snprintf(ip_str, sizeof(ip_str), "IP: %s", Gateway.getIpAddress().c_str());
+        char ip_str[36];
+        snprintf(ip_str, sizeof(ip_str), "%s (%d dBm)", Gateway.getIpAddress().c_str(), Gateway.getRssi());
         lv_label_set_text(lbl_top_ip, ip_str);
     } else if (Gateway.isAPMode()) {
         lv_label_set_text(lbl_top_ip, "AP: 192.168.4.1");

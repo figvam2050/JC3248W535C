@@ -14,6 +14,7 @@ public:
     void begin(BatteryPack* packs, SemaphoreHandle_t mutex);
     void loop();
     String getIpAddress();
+    int getRssi();
     bool isConnected();
     bool isAPMode();
 

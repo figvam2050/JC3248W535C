@@ -19,7 +19,7 @@ new_card = '''<!-- COMMON: CSV LOGGING CARD -->
     <div>Стан MicroSD картки: <b id="sd_status"><span class="pill">перевірка...</span></b> · Файл: <b id="logpath" style="color:var(--acc)">—</b> · Рядків: <b id="logrows">0</b></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button id="logbtn" onclick="toggleLog()">Старт запису на MicroSD (усі)</button>
-      <button id="web_rec_btn" onclick="toggleWebBankRecord()" style="background:#238636;color:#fff;font-weight:600">💻 Запис банку в браузер (CSV)</button>
+      <button id="web_rec_btn" onclick="toggleWebBankRecord()" style="background:#238636;color:#fff;font-weight:600">💻 Запис усіх АКБ в браузер (CSV)</button>
       <button id="btn_refresh_sd" onclick="refreshSdFiles()" style="background:#30363d;color:#fff">🔄 Оновити файли SD</button>
     </div>
   </div>'''
@@ -227,7 +227,7 @@ function toggleWebBankRecord() {
     isWebBankRecording = false;
     if (btn) {
       btn.style.background = '#238636';
-      btn.textContent = '💻 Запис банку в браузер (CSV)';
+      btn.textContent = '💻 Запис усіх АКБ в браузер (CSV)';
     }
     if (webBankRows.length > 1) {
       const now = new Date();

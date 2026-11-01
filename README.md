@@ -241,7 +241,8 @@
 
 ## 💻 8. Збірка та прошивка
 
-Проект побудовано на базі **PlatformIO** у VS Code:
+### Варіант А: Через PlatformIO (Рекомендовано)
+Проект оптимізовано для збірки в **PlatformIO** у VS Code:
 ```bash
 # Клонувати репозиторій
 git clone https://github.com/figvam2050/JC3248W535C.git
@@ -256,6 +257,35 @@ pio run -t upload
 # Моніторинг виводу Serial
 pio device monitor
 ```
+
+### Варіант Б: Через Arduino IDE 2.x
+Якщо ви використовуєте **Arduino IDE 2.x**, налаштуйте середовище згідно з офіційним пакетом Espressif:
+1. **Додайте URL менеджера плат:**
+   - Відкрийте `File` -> `Preferences` (Налаштування).
+   - У поле `Additional boards manager URLs` вставте офіційне посилання:
+     ```
+     https://espressif.github.io/arduino-esp32/package_esp32_index.json
+     ```
+2. **Встановіть платформу:**
+   - Перейдіть у `Boards Manager` (іконка плати зліва).
+   - Знайдіть **`esp32`** від Espressif Systems та встановіть версію **2.0.14** або новішу (сумісну з 2.0.x / 3.x).
+3. **Виберіть плату та параметри у меню `Tools`:**
+   - **Board:** `ESP32S3 Dev Module`
+   - **Port:** виберіть порт пристрою (наприклад `/dev/cu.usbmodem101` або `COMx`)
+   - **USB CDC On Boot:** `Enabled` (обов'язково для виводу Serial та логів через Type-C)
+   - **CPU Frequency:** `240MHz (WiFi)`
+   - **Flash Mode:** `QIO 80MHz`
+   - **Flash Size:** `16MB (128Mb)`
+   - **Partition Scheme:** `16M Flash (3MB APP/9.9MB FATFS)` або `Large 16MB SPIFFS` (щоб розмір розділу APP був > 2 МБ)
+   - **PSRAM:** `OPI PSRAM` (обов'язково для активації 8 МБ октальної PSRAM для буферів дисплея та веб-сервера)
+   - **Upload Speed:** `921600`
+4. **Необхідні бібліотеки:**
+   Встановіть через `Library Manager` (або переконайтеся в їх наявності у папці `lib/`):
+   - `lvgl` (версія 8.3.11)
+   - `ArduinoJson` (версія 6.21.x або 7.x)
+   - `ESPAsyncWebServer` та `AsyncTCP`
+   - `AXS15231B` (драйвер QSPI дисплея)
+5. Натисніть **Upload** (стрілочка).
 
 ---
 

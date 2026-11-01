@@ -149,7 +149,7 @@ canvas{width:100%;height:auto;display:block}
 </style></head><body>
 
 <header>
-  <h1>Vision BMS Multi-Pack Monitor <span id="conn" class="pill">…</span></h1>
+  <h1>Vision BMS Multi-Pack Monitor <span id="conn" class="pill">…</span> <span id="wifi_rssi" class="pill" style="font-size:11px;background:#21262d;color:#8b949e" title="Рівень сигналу Wi-Fi">📶 ...</span></h1>
   <div class="controls">
     <button id="modebtn" class="btn-mode passive" onclick="toggleMode()">👂 Режим: Пасивний (Sniffer)</button>
     <button class="btn-rescan" onclick="triggerRescan()">🔄 Пересканувати всі 16</button>
@@ -170,7 +170,7 @@ canvas{width:100%;height:auto;display:block}
 <div id="view_summary">
   <div class="bank-grid">
     <div class="bank-card">
-      <div class="l">Середня напруга банку</div>
+      <div class="l">Середня напруга всіх АКБ</div>
       <div class="v" id="b_v">—</div>
       <div class="subtext">Сер. значення по підключеним АКБ</div>
     </div>
@@ -180,12 +180,12 @@ canvas{width:100%;height:auto;display:block}
       <div class="subtext" id="b_p">— кВт</div>
     </div>
     <div class="bank-card">
-      <div class="l">Середній SOC банку</div>
+      <div class="l">Середній SOC системи АКБ</div>
       <div class="v" id="b_soc">—</div>
       <div class="subtext" id="b_cap">Залишок: — А·ч</div>
     </div>
     <div class="bank-card">
-      <div class="l">Розбаланс у всьому банку</div>
+      <div class="l">Розбаланс між усіма АКБ</div>
       <div class="v" id="b_diff">—</div>
       <div class="subtext" id="b_extremes">Min: — | Max: —</div>
     </div>
@@ -209,7 +209,7 @@ canvas{width:100%;height:auto;display:block}
             <th>SOC</th>
             <th>Min ком.</th>
             <th>Max ком.</th>
-            <th>Δ банку</th>
+            <th>Δ системи</th>
             <th>Баланс</th>
             <th>Темп. (PCB/Avg/Max)</th>
             <th>Тривоги</th>
@@ -229,7 +229,7 @@ canvas{width:100%;height:auto;display:block}
   <!-- AUTONOMY BANNER -->
   <div class="bank-grid" style="margin-bottom:16px">
     <div class="bank-card" style="border-left:4px solid var(--ok)">
-      <div class="l">Запас енергії в банку</div>
+      <div class="l">Запас енергії всіх АКБ</div>
       <div class="v" id="c_energy" style="color:var(--ok)">— кВт·год</div>
       <div class="subtext">Розраховано з урахуванням поточної ємності</div>
     </div>
@@ -242,14 +242,14 @@ canvas{width:100%;height:auto;display:block}
 
   <!-- LIVE ROLLING CANVAS CHARTS -->
   <div class="card" style="margin-bottom:16px">
-    <h2>📈 Напруга та струм банку (в реальному часі)</h2>
+    <h2>📈 Напруга та струм усіх АКБ (в реальному часі)</h2>
     <div class="chart-box">
       <canvas id="historyChart" width="840" height="190"></canvas>
     </div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
-    <h2>⚖️ Динаміка розбалансу комірок (Δ банку, mV)</h2>
+    <h2>⚖️ Динаміка розбалансу комірок (Δ системи, mV)</h2>
     <div class="chart-box">
       <canvas id="deltaChart" width="840" height="150"></canvas>
     </div>
@@ -416,7 +416,7 @@ canvas{width:100%;height:auto;display:block}
       <div class="chart-box">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <b>📈 Графік напруги та струму за весь сеанс</b>
-          <div style="font-size:12px;color:var(--dim)">Напруга банку (зелена) та струм (блакитна)</div>
+          <div style="font-size:12px;color:var(--dim)">Напруга АКБ (зелена) та струм (блакитна)</div>
         </div>
         <canvas id="logChart" width="900" height="260"></canvas>
       </div>
@@ -1199,7 +1199,7 @@ function drawDeltaChart() {
 
   // Draw legend
   ctx.font = '11px sans-serif';
-  ctx.fillStyle = '#d29922'; ctx.fillText('■ Δ розбалансу банку: ' + lastD + ' mV', 20, 18);
+  ctx.fillStyle = '#d29922'; ctx.fillText('■ Δ розбалансу комірок: ' + lastD + ' mV', 20, 18);
   ctx.fillStyle = statusCol; ctx.fillText('Стан: ' + statusTxt, 210, 18);
 
   // Grid (3 intervals)
@@ -1380,12 +1380,12 @@ function openReport() {
   const packs = d.packs || {};
   const addrs = Object.keys(packs).sort();
 
-  let html = `<h2>Паспорт-звіт діагностики стану акумуляторного банку Vision</h2>
+  let html = `<h2>Паспорт-звіт діагностики стану системи АКБ Vision</h2>
   <div style="color:#666;font-size:12px;margin-bottom:14px">Дата формування: ${d.ts || new Date().toLocaleString()} · Порт: ${d.port}</div>
 
-  <div class="rep-sec">1. Загальний енергетичний статус банку</div>
+  <div class="rep-sec">1. Загальний енергетичний статус системи АКБ</div>
   <table>
-    <tr><th>Підключено АКБ</th><th>Загальна напруга</th><th>Сумарний струм</th><th>Потужність</th><th>Середній SOC (OCV)</th><th>Залишок енергії</th><th>Макс. розбаланс банку</th></tr>
+    <tr><th>Підключено АКБ</th><th>Загальна напруга</th><th>Сумарний струм</th><th>Потужність</th><th>Середній SOC (OCV)</th><th>Залишок енергії</th><th>Макс. розбаланс комірок</th></tr>
     <tr>
       <td><b>${sum.online_packs} з ${sum.total_packs}</b></td>
       <td>${sum.avg_voltage.toFixed(2)} V</td>
@@ -1441,7 +1441,7 @@ function openReport() {
   <div style="background:#f9f9f9;padding:12px;border:1px solid #ddd;border-radius:6px;font-size:12px;line-height:1.6">
     • <b>Стан розбалансу:</b> ${diag.weak_cell}<br>
     • <b>Оцінка внутрішнього опору:</b> ${diag.rint_summary}<br>
-    • <b>Рекомендації:</b> ${sum.cell_delta_mv > 50 ? 'Рекомендується увімкнути режим балансування (DIP 4 на COM-Box) для вирівнювання відстаючих комірок під час буферного заряду.' : 'Банк збалансований, відхилення напруг у межах норми.'}
+    • <b>Рекомендації:</b> ${sum.cell_delta_mv > 50 ? 'Рекомендується увімкнути режим балансування (DIP 4 на COM-Box) для вирівнювання відстаючих комірок під час буферного заряду.' : 'Усі АКБ збалансовані, відхилення напруг у межах норми.'}
   </div>`;
 
   document.getElementById('report_content').innerHTML = html;
@@ -1506,7 +1506,7 @@ function openInverterModal() {
         <td>Bulk (Макс. ємність 100%)</td>
         <td><b>${vBulkMax} V</b></td>
         <td>3.55 V</td>
-        <td>Повний заряд. Використовувати тільки якщо банк ідеально відбалансований (Δ &lt; 30 mV).</td>
+        <td>Повний заряд. Використовувати тільки якщо система АКБ ідеально відбалансована (Δ &lt; 30 mV).</td>
       </tr>
       <tr>
         <td><b>Float (Буферний підзаряд)</b></td>
@@ -1816,7 +1816,7 @@ function renderLogAnalysisResults() {
       <div class="subtext">Знайдено АКБ: <b>${d.addrs.join(', ')}</b></div>
     </div>
     <div class="bank-card">
-      <div class="l">Діапазон напруги банку</div>
+      <div class="l">Діапазон напруги системи АКБ</div>
       <div class="v" style="font-size:20px">${d.minV.toFixed(2)} — ${d.maxV.toFixed(2)} V</div>
       <div class="subtext">ΔV сеансу: ${(d.maxV - d.minV).toFixed(2)} V</div>
     </div>
@@ -1826,7 +1826,7 @@ function renderLogAnalysisResults() {
       <div class="subtext">Заряд / Розряд</div>
     </div>
     <div class="bank-card">
-      <div class="l">Макс. розбаланс банку</div>
+      <div class="l">Макс. розбаланс комірок</div>
       <div class="v" style="font-size:20px;color:${d.maxBankDelta > 50 ? 'var(--bad)' : 'var(--ok)'}">Δ = ${d.maxBankDelta} mV</div>
       <div class="subtext">Пікове розходження комірок</div>
     </div>
@@ -1949,7 +1949,25 @@ async function tick() {
 
     const d = latestData;
     const c = document.getElementById('conn');
+    const wr = document.getElementById('wifi_rssi');
     const onlineCnt = d.summary ? d.summary.online_packs : 0;
+
+    if (wr && d.rssi !== undefined) {
+      const r = d.rssi;
+      let bars = '📶';
+      let rColor = '#3fb950';
+      if (r === 0) {
+        wr.textContent = '📶 AP';
+        wr.style.color = '#8b949e';
+      } else {
+        if (r < -80) { rColor = '#f85149'; bars = ' 1/4'; }
+        else if (r < -70) { rColor = '#d29922'; bars = ' 2/4'; }
+        else if (r < -60) { rColor = '#58a6ff'; bars = ' 3/4'; }
+        else { rColor = '#3fb950'; bars = ' 4/4'; }
+        wr.textContent = '📶 ' + r + ' dBm (' + bars.trim() + ')';
+        wr.style.color = rColor;
+      }
+    }
 
     if (d.is_scanning) {
       c.textContent = d.scan_msg || 'СКАНУВАННЯ...';

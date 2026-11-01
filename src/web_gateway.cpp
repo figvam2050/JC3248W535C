@@ -193,6 +193,7 @@ void WebGateway::setupRoutes() {
         doc["log_path"] = Logger.isBankLogging() ? "/bms_bank_log.csv" : nullptr;
         doc["log_rows"] = Logger.getBankRows();
         doc["sd_card"] = Logger.isAvailable();
+        doc["rssi"] = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : 0;
         doc["ts"] = "Online";
 
         JsonArray activeAddrs = doc.createNestedArray("active_addrs");
@@ -488,6 +489,13 @@ String WebGateway::getIpAddress() {
         return WiFi.softAPIP().toString();
     }
     return "Не підключено";
+}
+
+int WebGateway::getRssi() {
+    if (WiFi.status() == WL_CONNECTED) {
+        return WiFi.RSSI();
+    }
+    return 0;
 }
 
 bool WebGateway::isConnected() {
