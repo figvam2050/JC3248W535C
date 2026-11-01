@@ -810,46 +810,49 @@ static void build_ui() {
     lv_obj_set_style_pad_all(top_nav_bar, 2, 0);
     lv_obj_clear_flag(top_nav_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Button Settings (Gear Icon)
+    // 1. Button Settings (Gear Icon) - enlarged to 32x28
     btn_nav_settings = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_settings, 36, 28);
-    lv_obj_align(btn_nav_settings, LV_ALIGN_LEFT_MID, 2, 0);
+    lv_obj_set_size(btn_nav_settings, 32, 28);
+    lv_obj_align(btn_nav_settings, LV_ALIGN_LEFT_MID, 1, 0);
     lv_obj_set_style_bg_color(btn_nav_settings, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_settings, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(btn_nav_settings, 1, 0);
     lv_obj_set_style_radius(btn_nav_settings, 6, 0);
+    lv_obj_set_style_pad_all(btn_nav_settings, 0, 0);
     lv_obj_add_event_cb(btn_nav_settings, nav_settings_click_cb, LV_EVENT_CLICKED, NULL);
 
     lbl_nav_settings = lv_label_create(btn_nav_settings);
     lv_label_set_text(lbl_nav_settings, LV_SYMBOL_SETTINGS);
     lv_obj_set_style_text_color(lbl_nav_settings, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(lbl_nav_settings, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lbl_nav_settings, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_nav_settings, LV_ALIGN_CENTER, 0, 0);
 
-    // Button "All"
+    // 2. Button "Home" (former "All") - widened to 48x28
     btn_nav_all = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_all, 42, 28);
-    lv_obj_align(btn_nav_all, LV_ALIGN_LEFT_MID, 42, 0);
+    lv_obj_set_size(btn_nav_all, 48, 28);
+    lv_obj_align(btn_nav_all, LV_ALIGN_LEFT_MID, 36, 0);
     lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(0x164E63), 0);
     lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_border_width(btn_nav_all, 1, 0);
     lv_obj_set_style_radius(btn_nav_all, 6, 0);
+    lv_obj_set_style_pad_all(btn_nav_all, 0, 0);
     lv_obj_add_event_cb(btn_nav_all, nav_all_click_cb, LV_EVENT_CLICKED, NULL);
 
     lbl_nav_all = lv_label_create(btn_nav_all);
-    lv_label_set_text(lbl_nav_all, "All");
+    lv_label_set_text(lbl_nav_all, "Home");
     lv_obj_set_style_text_color(lbl_nav_all, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_nav_all, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_nav_all, LV_ALIGN_CENTER, 0, 0);
 
-    // Button "Logs"
+    // 3. Button "Logs" - widened to 48x28
     btn_nav_logs = lv_btn_create(top_nav_bar);
     lv_obj_set_size(btn_nav_logs, 48, 28);
-    lv_obj_align(btn_nav_logs, LV_ALIGN_LEFT_MID, 88, 0);
+    lv_obj_align(btn_nav_logs, LV_ALIGN_LEFT_MID, 87, 0);
     lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_logs, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(btn_nav_logs, 1, 0);
     lv_obj_set_style_radius(btn_nav_logs, 6, 0);
+    lv_obj_set_style_pad_all(btn_nav_logs, 0, 0);
     lv_obj_add_event_cb(btn_nav_logs, nav_logs_click_cb, LV_EVENT_CLICKED, NULL);
 
     lbl_nav_logs = lv_label_create(btn_nav_logs);
@@ -858,19 +861,19 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_nav_logs, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_nav_logs, LV_ALIGN_CENTER, 0, 0);
 
-    // Right Side: Power Source Icon
+    // Right Side: Power Source Icon (USB) - fixed position at far right
     lbl_top_power_src = lv_label_create(top_nav_bar);
     lv_label_set_text(lbl_top_power_src, LV_SYMBOL_USB);
     lv_obj_set_style_text_color(lbl_top_power_src, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_top_power_src, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lbl_top_power_src, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_top_power_src, LV_ALIGN_RIGHT_MID, -2, 0);
 
-    // Right Side: IP + Wi-Fi RSSI (Larger Font 12px)
+    // Right Side: IP + Wi-Fi RSSI (placed cleanly to the left of the USB icon with safety margin)
     lbl_top_ip = lv_label_create(top_nav_bar);
-    lv_label_set_text(lbl_top_ip, LV_SYMBOL_WIFI " ...");
+    lv_label_set_text(lbl_top_ip, "...");
     lv_obj_set_style_text_color(lbl_top_ip, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -26, 0);
+    lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -22, 0);
 
     // Create TabView with tab_size = 0 (completely disables default button matrix header!)
     tabview = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 0);
@@ -1248,16 +1251,16 @@ static void update_ui() {
 
     if (Gateway.isConnected()) {
         char ip_str[36];
-        snprintf(ip_str, sizeof(ip_str), "%s %d dBm", Gateway.getIpAddress().c_str(), Gateway.getRssi());
+        snprintf(ip_str, sizeof(ip_str), "%s %ddBm", Gateway.getIpAddress().c_str(), Gateway.getRssi());
         lv_label_set_text(lbl_top_ip, ip_str);
     } else if (Gateway.isAPMode()) {
-        lv_label_set_text(lbl_top_ip, "192.168.4.1 (AP)");
+        lv_label_set_text(lbl_top_ip, "192.168.4.1");
     } else {
         lv_label_set_text(lbl_top_ip, "Wi-Fi: ...");
     }
 
-    // Power source indication (default USB; ready for Battery ADC)
-    lv_label_set_text(lbl_top_power_src, LV_SYMBOL_USB " USB");
+    // Power source indication (compact symbol only)
+    lv_label_set_text(lbl_top_power_src, LV_SYMBOL_USB);
 
     if (alarms) {
         lv_label_set_text(lbl_mode_pill, LV_SYMBOL_WARNING " ALARM");
