@@ -184,6 +184,7 @@ static void refresh_logs_ui();
 
 struct PackUI {
     lv_obj_t *tab;
+    lv_obj_t *lbl_title;
     lv_obj_t *lbl_status;
     lv_obj_t *lbl_voltage;
     lv_obj_t *lbl_current;
@@ -389,27 +390,21 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_t *top_card = create_glass_card(tab, 308, 88);
     lv_obj_align(top_card, LV_ALIGN_TOP_MID, 0, 0);
 
-    // Back to Overview Button
-    lv_obj_t *btn_back = lv_btn_create(top_card);
-    lv_obj_set_size(btn_back, 64, 24);
-    lv_obj_align(btn_back, LV_ALIGN_TOP_LEFT, -2, -4);
-    lv_obj_set_style_bg_color(btn_back, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_border_color(btn_back, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_border_width(btn_back, 1, 0);
-    lv_obj_set_style_radius(btn_back, 6, 0);
-    lv_obj_add_event_cb(btn_back, back_to_all_click_cb, LV_EVENT_CLICKED, NULL);
+    // Pack Name Label: e.g. "БАТАРЕЯ #1 (PACK 1)"
+    ui.lbl_title = lv_label_create(top_card);
+    char pTitle[32];
+    snprintf(pTitle, sizeof(pTitle), "БАТАРЕЯ #%u", pack_idx + 1);
+    lv_label_set_text(ui.lbl_title, pTitle);
+    lv_obj_set_style_text_color(ui.lbl_title, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(ui.lbl_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(ui.lbl_title, LV_ALIGN_TOP_LEFT, 2, 0);
 
-    lv_obj_t *lbl_back = lv_label_create(btn_back);
-    lv_label_set_text(lbl_back, LV_SYMBOL_LEFT " All");
-    lv_obj_set_style_text_color(lbl_back, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_back, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_back, LV_ALIGN_CENTER, 0, 0);
-
+    // Status Pill (e.g. "CHARGING", "STANDBY")
     ui.lbl_status = lv_label_create(top_card);
     lv_label_set_text(ui.lbl_status, "NORMAL");
     lv_obj_set_style_text_color(ui.lbl_status, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(ui.lbl_status, &lv_font_montserrat_12, 0);
-    lv_obj_align(ui.lbl_status, LV_ALIGN_TOP_LEFT, 68, 0);
+    lv_obj_set_style_text_font(ui.lbl_status, &lv_font_montserrat_10, 0);
+    lv_obj_align(ui.lbl_status, LV_ALIGN_TOP_LEFT, 110, 2);
 
     ui.lbl_delta = lv_label_create(top_card);
     lv_label_set_text(ui.lbl_delta, "Delta: -- mV");
