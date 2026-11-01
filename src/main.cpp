@@ -2,6 +2,7 @@
 #include <Arduino_GFX_Library.h>
 #include <Wire.h>
 #include <lvgl.h>
+#include <time.h>
 #include "bms_data.h"
 #include "rs485_sniffer.h"
 #include "web_gateway.h"
@@ -1939,6 +1940,10 @@ void setup() {
     Sniffer.begin();
     Gateway.begin(g_packs, dataMutex);
 
+    // Configure NTP time for Kyiv timezone: EET/EEST (UTC+2 in winter, UTC+3 with daylight saving time)
+    // POSIX TZ string for Kyiv: "EET-2EEST,M3.5.0/3,M10.5.0/4"
+    configTzTime("EET-2EEST,M3.5.0/3,M10.5.0/4", "pool.ntp.org", "time.google.com", "time.cloudflare.com");
+
     xTaskCreatePinnedToCore(
         sniffer_task,
         "SnifferTask",
@@ -1976,12 +1981,18 @@ void loop() {
         if (millis() - last_ss_tick >= 1000) {
             last_ss_tick = millis();
             
-            // Format time from system millis or uptime
-            uint32_t sec = millis() / 1000;
-            uint32_t min = (sec / 60) % 60;
-            uint32_t hr = (sec / 3600) % 24;
+            // Format real Kyiv local time if synced, otherwise fallback to uptime
+            time_t now = time(nullptr);
+            struct tm timeinfo;
             char tBuf[16];
-            snprintf(tBuf, sizeof(tBuf), "%02u:%02u", hr, min);
+            if (now > 1600000000 && localtime_r(&now, &timeinfo)) {
+                snprintf(tBuf, sizeof(tBuf), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+            } else {
+                uint32_t sec = millis() / 1000;
+                uint32_t min = (sec / 60) % 60;
+                uint32_t hr = (sec / 3600) % 24;
+                snprintf(tBuf, sizeof(tBuf), "%02u:%02u", hr, min);
+            }
             lv_label_set_text(lbl_ss_time, tBuf);
 
             // Subtle burn-in protection shift every 30 seconds
