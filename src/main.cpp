@@ -84,6 +84,16 @@ static lv_obj_t *lbl_delta_val = NULL;
 static lv_obj_t *bar_delta = NULL;
 static lv_obj_t *lbl_delta_extremes = NULL;
 
+// Power Flow Diagram Widgets in Gauge Card
+static lv_obj_t *node_grid = NULL;
+static lv_obj_t *node_inv = NULL;
+static lv_obj_t *node_home = NULL;
+static lv_obj_t *node_bat = NULL;
+static lv_obj_t *lbl_flow_arrow_grid = NULL;
+static lv_obj_t *lbl_flow_arrow_bat = NULL;
+static lv_obj_t *lbl_flow_arrow_home = NULL;
+static uint8_t s_flow_anim_step = 0;
+
 // V2 Pack Selector Quick Strip on Overview
 static lv_obj_t *pack_strip_btns[4];
 static lv_obj_t *pack_strip_lbls[4];
@@ -770,73 +780,125 @@ static void build_ui() {
     lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 160);
     lv_obj_align(gauge_card, LV_ALIGN_TOP_MID, 0, 52);
 
-    lbl_mode_pill = lv_label_create(gauge_card);
-    lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " NORMAL OPERATION");
-    lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_mode_pill, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_mode_pill, LV_ALIGN_TOP_LEFT, 2, 0);
-
+    // SOC Arc (compacted to 112x112 so it doesn't collide with headers)
     arc_soc = lv_arc_create(gauge_card);
-    lv_obj_set_size(arc_soc, 136, 136);
+    lv_obj_set_size(arc_soc, 112, 112);
     lv_arc_set_rotation(arc_soc, 135);
     lv_arc_set_bg_angles(arc_soc, 0, 270);
     lv_arc_set_range(arc_soc, 0, 100);
     lv_arc_set_value(arc_soc, 75);
     lv_obj_remove_style(arc_soc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(arc_soc, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_width(arc_soc, 12, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc_soc, 10, LV_PART_MAIN);
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_PANEL_INNER), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc_soc, 12, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc_soc, 10, LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
-    lv_obj_align(arc_soc, LV_ALIGN_LEFT_MID, -4, 6);
+    lv_obj_align(arc_soc, LV_ALIGN_LEFT_MID, 4, 4);
 
     lbl_soc_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_soc_val, "75%");
     lv_obj_set_style_text_color(lbl_soc_val, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_soc_val, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(lbl_soc_val, &lv_font_montserrat_24, 0);
     lv_obj_align_to(lbl_soc_val, arc_soc, LV_ALIGN_CENTER, 0, -8);
 
     lbl_soc_sub = lv_label_create(gauge_card);
     lv_label_set_text(lbl_soc_sub, "STATE OF CHARGE");
     lv_obj_set_style_text_color(lbl_soc_sub, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_soc_sub, &lv_font_montserrat_10, 0);
-    lv_obj_align_to(lbl_soc_sub, arc_soc, LV_ALIGN_CENTER, 0, 16);
+    lv_obj_align_to(lbl_soc_sub, arc_soc, LV_ALIGN_CENTER, 0, 14);
+
+    // Status pill moved to top right above ACTIVE POWER
+    lbl_mode_pill = lv_label_create(gauge_card);
+    lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " NORMAL OPERATION");
+    lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_mode_pill, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_mode_pill, LV_ALIGN_TOP_RIGHT, -4, 0);
 
     lv_obj_t *lbl_pwr_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_pwr_title, "ACTIVE POWER");
     lv_obj_set_style_text_color(lbl_pwr_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_pwr_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -6, 12);
+    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -4, 18);
 
     lbl_power_kw = lv_label_create(gauge_card);
     lv_label_set_text(lbl_power_kw, "1.55 kW");
     lv_obj_set_style_text_color(lbl_power_kw, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_power_kw, &lv_font_montserrat_24, 0);
-    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -6, 26);
+    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -4, 30);
 
+    // Voltage & Current moved higher up
     lv_obj_t *lbl_v_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_v_title, "VOLTAGE");
     lv_obj_set_style_text_color(lbl_v_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_v_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_v_title, LV_ALIGN_RIGHT_MID, -70, 18);
+    lv_obj_align(lbl_v_title, LV_ALIGN_TOP_RIGHT, -72, 60);
 
     lbl_voltage_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_voltage_val, "51.72 V");
     lv_obj_set_style_text_color(lbl_voltage_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_voltage_val, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_voltage_val, LV_ALIGN_RIGHT_MID, -70, 34);
+    lv_obj_align(lbl_voltage_val, LV_ALIGN_TOP_RIGHT, -72, 74);
 
     lv_obj_t *lbl_i_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_i_title, "CURRENT");
     lv_obj_set_style_text_color(lbl_i_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_i_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_i_title, LV_ALIGN_RIGHT_MID, -6, 18);
+    lv_obj_align(lbl_i_title, LV_ALIGN_TOP_RIGHT, -4, 60);
 
     lbl_current_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_current_val, "+29.9 A");
     lv_obj_set_style_text_color(lbl_current_val, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(lbl_current_val, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_current_val, LV_ALIGN_RIGHT_MID, -6, 34);
+    lv_obj_align(lbl_current_val, LV_ALIGN_TOP_RIGHT, -4, 74);
+
+    // Energy Flow Mini-Diagram (Grid -> Inv -> Home, Bat <-> Inv)
+    lv_obj_t *flow_strip = lv_obj_create(gauge_card);
+    lv_obj_set_size(flow_strip, 172, 42);
+    lv_obj_align(flow_strip, LV_ALIGN_BOTTOM_RIGHT, 0, -2);
+    lv_obj_set_style_bg_color(flow_strip, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(flow_strip, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(flow_strip, 1, 0);
+    lv_obj_set_style_radius(flow_strip, 8, 0);
+    lv_obj_set_style_pad_all(flow_strip, 2, 0);
+    lv_obj_clear_flag(flow_strip, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Node: GRID
+    node_grid = lv_label_create(flow_strip);
+    lv_label_set_text(node_grid, LV_SYMBOL_CHARGE "\nGRID");
+    lv_obj_set_style_text_align(node_grid, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(node_grid, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_align(node_grid, LV_ALIGN_LEFT_MID, 4, 0);
+
+    // Flow Arrow: GRID -> INV
+    lbl_flow_arrow_grid = lv_label_create(flow_strip);
+    lv_label_set_text(lbl_flow_arrow_grid, "->");
+    lv_obj_set_style_text_font(lbl_flow_arrow_grid, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_align(lbl_flow_arrow_grid, LV_ALIGN_LEFT_MID, 38, 0);
+
+    // Node: INV
+    node_inv = lv_label_create(flow_strip);
+    lv_label_set_text(node_inv, LV_SYMBOL_SETTINGS "\nINV");
+    lv_obj_set_style_text_align(node_inv, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(node_inv, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_align(node_inv, LV_ALIGN_CENTER, -6, 0);
+
+    // Flow Arrow: INV <-> BAT / HOME
+    lbl_flow_arrow_home = lv_label_create(flow_strip);
+    lv_label_set_text(lbl_flow_arrow_home, "->");
+    lv_obj_set_style_text_font(lbl_flow_arrow_home, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_align(lbl_flow_arrow_home, LV_ALIGN_RIGHT_MID, -36, 0);
+
+    // Node: HOME
+    node_home = lv_label_create(flow_strip);
+    lv_label_set_text(node_home, LV_SYMBOL_HOME "\nHOME");
+    lv_obj_set_style_text_align(node_home, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(node_home, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(node_home, lv_color_white(), 0);
+    lv_obj_align(node_home, LV_ALIGN_RIGHT_MID, -4, 0);
 
     // 3. Dynamic Alarm Banner
     card_alarm_banner = create_glass_card(tab_overview, 308, 48);
@@ -1004,7 +1066,7 @@ static void update_ui() {
     lv_label_set_text(lbl_top_power_src, LV_SYMBOL_USB " USB");
 
     if (alarms) {
-        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_WARNING " ALARM DETECTED");
+        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_WARNING " ALARM");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_ROSE), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_ROSE), LV_PART_INDICATOR);
     } else if (anyBalancing) {
@@ -1020,9 +1082,45 @@ static void update_ui() {
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_BLUE), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_BLUE), LV_PART_INDICATOR);
     } else {
-        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " STANDBY / IDLE");
+        lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " STANDBY");
         lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_CYAN), 0);
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_CYAN), LV_PART_INDICATOR);
+    }
+
+    // Update Energy Flow Animation & Colors
+    s_flow_anim_step = (s_flow_anim_step + 1) % 3;
+    const char* arrow_anim_fwd[3] = {"- >", "-- >", "->>"};
+    const char* arrow_anim_rev[3] = {"< -", "< --", "<<-"};
+
+    if (node_grid && node_inv && node_home) {
+        if (iSum > 0.5f) {
+            // Charging: Grid -> Inverter -> Battery & Home
+            lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(node_home, lv_color_white(), 0);
+            lv_label_set_text(lbl_flow_arrow_grid, arrow_anim_fwd[s_flow_anim_step]);
+            lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_EMERALD), 0);
+            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]);
+            lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_EMERALD), 0);
+        } else if (iSum < -0.5f) {
+            // Discharging: Battery -> Inverter -> Home (Off-grid / Outage)
+            lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_BLUE), 0);
+            lv_obj_set_style_text_color(node_home, lv_color_hex(CLR_CYAN), 0);
+            lv_label_set_text(lbl_flow_arrow_grid, "x");
+            lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]);
+            lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_CYAN), 0);
+        } else {
+            // Idle / Standby
+            lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_text_color(node_home, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_label_set_text(lbl_flow_arrow_grid, "--");
+            lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_label_set_text(lbl_flow_arrow_home, "--");
+            lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_TEXT_MUTED), 0);
+        }
     }
 
     if (alarms) {
