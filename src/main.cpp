@@ -242,10 +242,12 @@ struct PackUI {
     lv_obj_t *lbl_alarm_text;
     lv_obj_t *btn_log;
     lv_obj_t *lbl_log_btn;
-    lv_obj_t *chart_cells;
-    lv_chart_series_t *ser_cells;
-    lv_obj_t *lbl_cells[CELLS_PER_BATTERY];
+    lv_obj_t *lbl_diag_bar;
     lv_obj_t *cell_boxes[CELLS_PER_BATTERY];
+    lv_obj_t *cell_bars[CELLS_PER_BATTERY];
+    lv_obj_t *lbl_cell_num[CELLS_PER_BATTERY];
+    lv_obj_t *lbl_cell_volt[CELLS_PER_BATTERY];
+    lv_obj_t *lbl_cell_res[CELLS_PER_BATTERY];
     bool created;
 };
 static PackUI g_pack_ui[MAX_BATTERIES];
@@ -518,53 +520,67 @@ static void create_battery_tab(uint8_t pack_idx) {
     lv_obj_set_style_text_font(ui.lbl_log_btn, &lv_font_montserrat_10, 0);
     lv_obj_align(ui.lbl_log_btn, LV_ALIGN_CENTER, 0, 0);
 
-    // 3. 15S Cell Bar Chart & Pack Diagnostics Card
-    lv_obj_t *chart_card = create_glass_card(tab, 308, 92);
-    lv_obj_align(chart_card, LV_ALIGN_TOP_MID, 0, 134);
+    // 3. Compact Diagnostics Header (PCB, Avg, Max temps & pack R_int)
+    ui.lbl_diag_bar = lv_label_create(tab);
+    lv_label_set_text(ui.lbl_diag_bar, "PCB: 25C | Avg: 24C | Max: 25C | R_pack: 0.44mR");
+    lv_obj_set_style_text_color(ui.lbl_diag_bar, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(ui.lbl_diag_bar, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(ui.lbl_diag_bar, 8, 134);
 
-    ui.lbl_temps = lv_label_create(chart_card);
-    lv_label_set_text(ui.lbl_temps, "PCB: 25C | Avg: 24C | Max: 25C | R_int: 0.44mR");
-    lv_obj_set_style_text_color(ui.lbl_temps, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(ui.lbl_temps, &lv_font_montserrat_10, 0);
-    lv_obj_align(ui.lbl_temps, LV_ALIGN_TOP_LEFT, 2, -2);
-
-    ui.chart_cells = lv_chart_create(chart_card);
-    lv_obj_set_size(ui.chart_cells, 292, 60);
-    lv_obj_align(ui.chart_cells, LV_ALIGN_BOTTOM_MID, 0, 2);
-    lv_chart_set_type(ui.chart_cells, LV_CHART_TYPE_BAR);
-    lv_chart_set_range(ui.chart_cells, LV_CHART_AXIS_PRIMARY_Y, 3000, 3600);
-    lv_chart_set_point_count(ui.chart_cells, 15);
-    lv_obj_set_style_bg_color(ui.chart_cells, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_border_width(ui.chart_cells, 0, 0);
-    lv_obj_set_style_pad_all(ui.chart_cells, 2, 0);
-    ui.ser_cells = lv_chart_add_series(ui.chart_cells, lv_color_hex(CLR_CYAN), LV_CHART_AXIS_PRIMARY_Y);
-
-    // 4. 15 Cell Values Matrix
-    int start_y = 230;
+    // 4. Modern Battery Cell Cards Matrix (5 rows x 3 columns)
+    // Vertical available space: 150 to 430 -> 280px total height!
+    // Each cell card: 96px wide, 50px high, with 6px gap vertically.
+    int start_y = 150;
     for (int i = 0; i < CELLS_PER_BATTERY; i++) {
         int row = i / 3;
         int col = i % 3;
         int x = 6 + col * (96 + 8);
-        int y = start_y + row * (38 + 4);
+        int y = start_y + row * (50 + 6);
 
+        // Cell card container (styled as battery cell)
         ui.cell_boxes[i] = lv_obj_create(tab);
-        lv_obj_set_size(ui.cell_boxes[i], 96, 38);
+        lv_obj_set_size(ui.cell_boxes[i], 96, 50);
         lv_obj_set_pos(ui.cell_boxes[i], x, y);
         lv_obj_set_style_bg_color(ui.cell_boxes[i], lv_color_hex(CLR_PANEL), 0);
         lv_obj_set_style_border_color(ui.cell_boxes[i], lv_color_hex(CLR_BORDER), 0);
         lv_obj_set_style_border_width(ui.cell_boxes[i], 1, 0);
         lv_obj_set_style_radius(ui.cell_boxes[i], 8, 0);
-        lv_obj_set_style_pad_all(ui.cell_boxes[i], 2, 0);
+        lv_obj_set_style_pad_all(ui.cell_boxes[i], 3, 0);
         lv_obj_clear_flag(ui.cell_boxes[i], LV_OBJ_FLAG_SCROLLABLE);
 
-        lv_obj_t *c_lbl = lv_label_create(ui.cell_boxes[i]);
-        char c_text[20];
-        snprintf(c_text, sizeof(c_text), "C%02d 3.300", i + 1);
-        lv_label_set_text(c_lbl, c_text);
-        lv_obj_set_style_text_font(c_lbl, &lv_font_montserrat_12, 0);
-        lv_obj_set_style_text_color(c_lbl, lv_color_white(), 0);
-        lv_obj_align(c_lbl, LV_ALIGN_CENTER, 0, 0);
-        ui.lbl_cells[i] = c_lbl;
+        // Micro battery level fill bar at bottom of the cell card
+        ui.cell_bars[i] = lv_bar_create(ui.cell_boxes[i]);
+        lv_obj_set_size(ui.cell_bars[i], 88, 4);
+        lv_obj_align(ui.cell_bars[i], LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_bar_set_range(ui.cell_bars[i], 0, 100);
+        lv_bar_set_value(ui.cell_bars[i], 75, LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(ui.cell_bars[i], lv_color_hex(0x1E293B), 0);
+        lv_obj_set_style_bg_color(ui.cell_bars[i], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
+        lv_obj_set_style_radius(ui.cell_bars[i], 2, 0);
+        lv_obj_set_style_radius(ui.cell_bars[i], 2, LV_PART_INDICATOR);
+
+        // Cell Number Header (top-left) e.g. "C01"
+        ui.lbl_cell_num[i] = lv_label_create(ui.cell_boxes[i]);
+        char c_num[8];
+        snprintf(c_num, sizeof(c_num), "C%02d", i + 1);
+        lv_label_set_text(ui.lbl_cell_num[i], c_num);
+        lv_obj_set_style_text_font(ui.lbl_cell_num[i], &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(ui.lbl_cell_num[i], lv_color_hex(CLR_TEXT_MUTED), 0);
+        lv_obj_align(ui.lbl_cell_num[i], LV_ALIGN_TOP_LEFT, 2, 0);
+
+        // Internal resistance (top-right) e.g. "0.42mR"
+        ui.lbl_cell_res[i] = lv_label_create(ui.cell_boxes[i]);
+        lv_label_set_text(ui.lbl_cell_res[i], "0.42mR");
+        lv_obj_set_style_text_font(ui.lbl_cell_res[i], &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(ui.lbl_cell_res[i], lv_color_hex(CLR_AMBER), 0);
+        lv_obj_align(ui.lbl_cell_res[i], LV_ALIGN_TOP_RIGHT, -2, 0);
+
+        // Big Voltage Display in Center e.g. "3.448 V"
+        ui.lbl_cell_volt[i] = lv_label_create(ui.cell_boxes[i]);
+        lv_label_set_text(ui.lbl_cell_volt[i], "3.300 V");
+        lv_obj_set_style_text_font(ui.lbl_cell_volt[i], &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(ui.lbl_cell_volt[i], lv_color_white(), 0);
+        lv_obj_align(ui.lbl_cell_volt[i], LV_ALIGN_CENTER, 0, 4);
     }
 
     ui.created = true;
@@ -1541,51 +1557,76 @@ static void update_ui() {
         snprintf(buf, sizeof(buf), "Delta: %u mV", p.cellDiff);
         lv_label_set_text(ui.lbl_delta, buf);
 
-        // Dynamic chart range around actual cells with 30mV padding for clear bar height contrast
-        int chartMin = p.cellMin > 40 ? (p.cellMin - 30) : 3000;
-        int chartMax = p.cellMax + 30;
-        if (chartMax - chartMin < 80) {
-            chartMin = ((chartMin + chartMax) / 2) - 40;
-            chartMax = chartMin + 80;
-        }
-        lv_chart_set_range(ui.chart_cells, LV_CHART_AXIS_PRIMARY_Y, chartMin, chartMax);
-
-        // Display temperatures & estimated cell internal resistance
+        // Display temperatures & estimated pack internal resistance
         float estRint = 0.42f + ((i % 3) * 0.03f);
-        snprintf(buf, sizeof(buf), "PCB: %dC | Avg: %dC | Max: %dC | R_int: %.2fmR", p.tempPcb, p.tempAvg, p.tempMax, estRint);
-        lv_label_set_text(ui.lbl_temps, buf);
+        snprintf(buf, sizeof(buf), "PCB: %dC | Avg: %dC | Max: %dC | R_pack: %.2fmR", p.tempPcb, p.tempAvg, p.tempMax, estRint);
+        lv_label_set_text(ui.lbl_diag_bar, buf);
 
         for (int c = 0; c < CELLS_PER_BATTERY; c++) {
             uint16_t mv = p.cells[c];
-            lv_chart_set_value_by_id(ui.chart_cells, ui.ser_cells, c, mv);
 
+            // 1. Voltage formatted as "X.XXX V" (or "--- V" if 0)
+            if (mv > 0) {
+                snprintf(buf, sizeof(buf), "%u.%03u V", mv / 1000, mv % 1000);
+            } else {
+                snprintf(buf, sizeof(buf), "--- V");
+            }
+            lv_label_set_text(ui.lbl_cell_volt[c], buf);
+
+            // 2. Approximate cell fill % based on LFP curve (3.0V = 0%, 3.45V = 100%)
+            int cellFill = 0;
+            if (mv >= 3000) {
+                cellFill = (int)((mv - 3000) * 100 / 450);
+                if (cellFill > 100) cellFill = 100;
+                if (cellFill < 0) cellFill = 0;
+            }
+            lv_bar_set_value(ui.cell_bars[c], cellFill, LV_ANIM_OFF);
+
+            // 3. Simulated/estimated cell internal resistance in mR (e.g. 0.40 - 0.46 mR)
+            float cRes = estRint + (((c * 7) % 7) - 3) * 0.01f;
+            snprintf(buf, sizeof(buf), "%.2fmR", cRes);
+            lv_label_set_text(ui.lbl_cell_res[c], buf);
+
+            // 4. Status color accents (Balance / Max / Min / Normal)
             bool bal = (p.balanceMask & (1 << c)) != 0;
             if (bal) {
-                snprintf(buf, sizeof(buf), "C%02d %u*", c + 1, mv);
-            } else {
-                snprintf(buf, sizeof(buf), "C%02d %u", c + 1, mv);
-            }
-            lv_label_set_text(ui.lbl_cells[c], buf);
-
-            if (bal) {
+                char numStr[12];
+                snprintf(numStr, sizeof(numStr), "C%02d *", c + 1);
+                lv_label_set_text(ui.lbl_cell_num[c], numStr);
+                lv_obj_set_style_text_color(ui.lbl_cell_num[c], lv_color_hex(CLR_PURPLE), 0);
                 lv_obj_set_style_bg_color(ui.cell_boxes[c], lv_color_hex(0x2D1B36), 0);
                 lv_obj_set_style_border_color(ui.cell_boxes[c], lv_color_hex(CLR_PURPLE), 0);
-                lv_obj_set_style_text_color(ui.lbl_cells[c], lv_color_hex(CLR_PURPLE), 0);
+                lv_obj_set_style_text_color(ui.lbl_cell_volt[c], lv_color_hex(CLR_PURPLE), 0);
+                lv_obj_set_style_bg_color(ui.cell_bars[c], lv_color_hex(CLR_PURPLE), LV_PART_INDICATOR);
             } else if (mv == p.cellMax && p.cellMax > p.cellMin) {
+                char numStr[12];
+                snprintf(numStr, sizeof(numStr), "C%02d MAX", c + 1);
+                lv_label_set_text(ui.lbl_cell_num[c], numStr);
+                lv_obj_set_style_text_color(ui.lbl_cell_num[c], lv_color_hex(CLR_EMERALD), 0);
                 lv_obj_set_style_bg_color(ui.cell_boxes[c], lv_color_hex(0x064E3B), 0);
                 lv_obj_set_style_border_color(ui.cell_boxes[c], lv_color_hex(CLR_EMERALD), 0);
-                lv_obj_set_style_text_color(ui.lbl_cells[c], lv_color_hex(CLR_EMERALD), 0);
+                lv_obj_set_style_text_color(ui.lbl_cell_volt[c], lv_color_hex(CLR_EMERALD), 0);
+                lv_obj_set_style_bg_color(ui.cell_bars[c], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
             } else if (mv == p.cellMin && p.cellMax > p.cellMin) {
+                char numStr[12];
+                snprintf(numStr, sizeof(numStr), "C%02d MIN", c + 1);
+                lv_label_set_text(ui.lbl_cell_num[c], numStr);
+                lv_obj_set_style_text_color(ui.lbl_cell_num[c], lv_color_hex(CLR_ROSE), 0);
                 lv_obj_set_style_bg_color(ui.cell_boxes[c], lv_color_hex(0x4C0519), 0);
                 lv_obj_set_style_border_color(ui.cell_boxes[c], lv_color_hex(CLR_ROSE), 0);
-                lv_obj_set_style_text_color(ui.lbl_cells[c], lv_color_hex(CLR_ROSE), 0);
+                lv_obj_set_style_text_color(ui.lbl_cell_volt[c], lv_color_hex(CLR_ROSE), 0);
+                lv_obj_set_style_bg_color(ui.cell_bars[c], lv_color_hex(CLR_ROSE), LV_PART_INDICATOR);
             } else {
+                char numStr[12];
+                snprintf(numStr, sizeof(numStr), "C%02d", c + 1);
+                lv_label_set_text(ui.lbl_cell_num[c], numStr);
+                lv_obj_set_style_text_color(ui.lbl_cell_num[c], lv_color_hex(CLR_TEXT_MUTED), 0);
                 lv_obj_set_style_bg_color(ui.cell_boxes[c], lv_color_hex(CLR_PANEL), 0);
                 lv_obj_set_style_border_color(ui.cell_boxes[c], lv_color_hex(CLR_BORDER), 0);
-                lv_obj_set_style_text_color(ui.lbl_cells[c], lv_color_white(), 0);
+                lv_obj_set_style_text_color(ui.lbl_cell_volt[c], lv_color_white(), 0);
+                lv_obj_set_style_bg_color(ui.cell_bars[c], lv_color_hex(CLR_CYAN), LV_PART_INDICATOR);
             }
         }
-        lv_chart_refresh(ui.chart_cells);
     }
 }
 
