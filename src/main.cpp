@@ -37,18 +37,20 @@
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 480
 
-// Premium Colors
-#define CLR_DARK_BG       0x080B10
-#define CLR_PANEL         0x121721
-#define CLR_PANEL_INNER   0x0D1219
-#define CLR_BORDER        0x1E293B
-#define CLR_CYAN          0x06B6D4
-#define CLR_EMERALD       0x10B981
-#define CLR_BLUE          0x38BDF8
-#define CLR_AMBER         0xF59E0B
-#define CLR_ROSE          0xF43F5E
-#define CLR_PURPLE        0xC084FC
-#define CLR_TEXT_MUTED    0x64748B
+// UI V2 Styling & Palette
+#define CLR_DARK_BG       0x070A0F  // Deep Cyber Black
+#define CLR_PANEL         0x0F172A  // Slate 900 Glass
+#define CLR_PANEL_INNER   0x090D16  // Deep Inset
+#define CLR_BORDER        0x1E293B  // Slate 800 Border
+#define CLR_BORDER_FOCUS  0x38BDF8  // Neon Blue Glow Border
+#define CLR_CYAN          0x06B6D4  // Electric Cyan
+#define CLR_EMERALD       0x10B981  // Neon Emerald (Charging)
+#define CLR_BLUE          0x38BDF8  // Sky Blue (Discharging)
+#define CLR_AMBER         0xF59E0B  // Gold Amber (Balancing)
+#define CLR_ROSE          0xF43F5E  // Laser Rose (Alarm)
+#define CLR_PURPLE        0xC084FC  // Purple
+#define CLR_TEXT_MUTED    0x64748B  // Muted Label Slate
+#define CLR_TEXT_TITLE    0x94A3B8  // Bright Title Slate
 
 static Arduino_DataBus *bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_D0, LCD_D1, LCD_D2, LCD_D3);
 static Arduino_GFX *panel = new Arduino_AXS15231B(bus, GFX_NOT_DEFINED, 0, false, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -81,6 +83,20 @@ static lv_obj_t *lbl_current_val = NULL;
 static lv_obj_t *lbl_delta_val = NULL;
 static lv_obj_t *bar_delta = NULL;
 static lv_obj_t *lbl_delta_extremes = NULL;
+
+// V2 Pack Selector Quick Strip on Overview
+static lv_obj_t *pack_strip_btns[4];
+static lv_obj_t *pack_strip_lbls[4];
+static lv_obj_t *pack_strip_bars[4];
+
+static void pack_strip_click_cb(lv_event_t *e) {
+    uintptr_t idx = (uintptr_t)lv_event_get_user_data(e);
+    // Tab 0 is All, Tab 1 is Logs, Tab 2..N are Packs
+    uint16_t targetTab = idx + 2;
+    if (tabview) {
+        lv_tabview_set_act(tabview, targetTab, LV_ANIM_ON);
+    }
+}
 
 static lv_obj_t *card_alarm_banner = NULL;
 static lv_obj_t *lbl_alarm_icon = NULL;
@@ -284,7 +300,7 @@ static lv_obj_t* create_glass_card(lv_obj_t *parent, int w, int h) {
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(card, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(card, 1, 0);
-    lv_obj_set_style_radius(card, 12, 0);
+    lv_obj_set_style_radius(card, 14, 0); // V2 Soft Curve
     lv_obj_set_style_pad_all(card, 8, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     return card;
@@ -719,29 +735,54 @@ static void build_ui() {
     lv_obj_align(lbl_delta_extremes, LV_ALIGN_BOTTOM_LEFT, 2, -2);
 
     // 5. Interactive REC Button Card on Overview
-    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 80);
-    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 354);
+    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 86);
+    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 352);
 
     btn_bank_log = lv_btn_create(info_card);
-    lv_obj_set_size(btn_bank_log, 292, 36);
+    lv_obj_set_size(btn_bank_log, 292, 34);
     lv_obj_align(btn_bank_log, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_bank_log, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(btn_bank_log, 1, 0);
-    lv_obj_set_style_radius(btn_bank_log, 8, 0);
+    lv_obj_set_style_radius(btn_bank_log, 10, 0);
     lv_obj_add_event_cb(btn_bank_log, btn_bank_log_cb, LV_EVENT_CLICKED, NULL);
 
     lbl_bank_log = lv_label_create(btn_bank_log);
-    lv_label_set_text(lbl_bank_log, "START BANK LOG (REC SD)");
+    lv_label_set_text(lbl_bank_log, LV_SYMBOL_SAVE " START BANK LOG (REC SD)");
     lv_obj_set_style_text_color(lbl_bank_log, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_bank_log, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_bank_log, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t *bus_tag = lv_label_create(info_card);
-    lv_label_set_text(bus_tag, "BUS: RS485 SNIFFER (TAP TO START / STOP LOG)");
-    lv_obj_set_style_text_color(bus_tag, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(bus_tag, &lv_font_montserrat_10, 0);
-    lv_obj_align(bus_tag, LV_ALIGN_BOTTOM_MID, 0, -2);
+    // V2 Pack Selector Strip (4 Quick Buttons)
+    for (int i = 0; i < 4; i++) {
+        pack_strip_btns[i] = lv_btn_create(info_card);
+        lv_obj_set_size(pack_strip_btns[i], 68, 36);
+        lv_obj_set_pos(pack_strip_btns[i], 2 + i * 72, 38);
+        lv_obj_set_style_bg_color(pack_strip_btns[i], lv_color_hex(CLR_PANEL_INNER), 0);
+        lv_obj_set_style_border_color(pack_strip_btns[i], lv_color_hex(CLR_BORDER), 0);
+        lv_obj_set_style_border_width(pack_strip_btns[i], 1, 0);
+        lv_obj_set_style_radius(pack_strip_btns[i], 8, 0);
+        lv_obj_set_style_pad_all(pack_strip_btns[i], 2, 0);
+        lv_obj_add_event_cb(pack_strip_btns[i], pack_strip_click_cb, LV_EVENT_CLICKED, (void*)(uintptr_t)i);
+
+        pack_strip_lbls[i] = lv_label_create(pack_strip_btns[i]);
+        char pName[12];
+        snprintf(pName, sizeof(pName), "P%02d --%%", i + 1);
+        lv_label_set_text(pack_strip_lbls[i], pName);
+        lv_obj_set_style_text_color(pack_strip_lbls[i], lv_color_hex(CLR_TEXT_MUTED), 0);
+        lv_obj_set_style_text_font(pack_strip_lbls[i], &lv_font_montserrat_10, 0);
+        lv_obj_align(pack_strip_lbls[i], LV_ALIGN_TOP_MID, 0, 1);
+
+        pack_strip_bars[i] = lv_bar_create(pack_strip_btns[i]);
+        lv_obj_set_size(pack_strip_bars[i], 60, 5);
+        lv_obj_align(pack_strip_bars[i], LV_ALIGN_BOTTOM_MID, 0, -2);
+        lv_bar_set_range(pack_strip_bars[i], 0, 100);
+        lv_bar_set_value(pack_strip_bars[i], 0, LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(pack_strip_bars[i], lv_color_hex(0x1E293B), 0);
+        lv_obj_set_style_bg_color(pack_strip_bars[i], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
+        lv_obj_set_style_radius(pack_strip_bars[i], 2, 0);
+        lv_obj_set_style_radius(pack_strip_bars[i], 2, LV_PART_INDICATOR);
+    }
 
     // Create Dedicated Logs Tab
     create_logs_tab();
@@ -914,6 +955,38 @@ static void update_ui() {
     if (count > 0 && gMax >= gMin) {
         snprintf(buf, sizeof(buf), "Min: %.3f V  |  Max: %.3f V", gMin / 1000.0f, gMax / 1000.0f);
         lv_label_set_text(lbl_delta_extremes, buf);
+    }
+
+    // Update V2 Pack Quick Selector Strip (first 4 packs)
+    for (int pIdx = 0; pIdx < 4; pIdx++) {
+        if (local_packs[pIdx].isOnline) {
+            char pStr[16];
+            snprintf(pStr, sizeof(pStr), "P%02d %u%%", pIdx + 1, local_packs[pIdx].soc);
+            lv_label_set_text(pack_strip_lbls[pIdx], pStr);
+            lv_bar_set_value(pack_strip_bars[pIdx], local_packs[pIdx].soc, LV_ANIM_OFF);
+
+            bool pAlarm = (local_packs[pIdx].warningRaw || local_packs[pIdx].protectionRaw || local_packs[pIdx].errorRaw);
+            if (pAlarm) {
+                lv_obj_set_style_text_color(pack_strip_lbls[pIdx], lv_color_hex(CLR_ROSE), 0);
+                lv_obj_set_style_border_color(pack_strip_btns[pIdx], lv_color_hex(CLR_ROSE), 0);
+                lv_obj_set_style_bg_color(pack_strip_bars[pIdx], lv_color_hex(CLR_ROSE), LV_PART_INDICATOR);
+            } else if (local_packs[pIdx].balanceMask != 0) {
+                lv_obj_set_style_text_color(pack_strip_lbls[pIdx], lv_color_hex(CLR_AMBER), 0);
+                lv_obj_set_style_border_color(pack_strip_btns[pIdx], lv_color_hex(CLR_AMBER), 0);
+                lv_obj_set_style_bg_color(pack_strip_bars[pIdx], lv_color_hex(CLR_AMBER), LV_PART_INDICATOR);
+            } else {
+                lv_obj_set_style_text_color(pack_strip_lbls[pIdx], lv_color_hex(CLR_CYAN), 0);
+                lv_obj_set_style_border_color(pack_strip_btns[pIdx], lv_color_hex(CLR_BORDER), 0);
+                lv_obj_set_style_bg_color(pack_strip_bars[pIdx], lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
+            }
+        } else {
+            char pStr[16];
+            snprintf(pStr, sizeof(pStr), "P%02d OFF", pIdx + 1);
+            lv_label_set_text(pack_strip_lbls[pIdx], pStr);
+            lv_bar_set_value(pack_strip_bars[pIdx], 0, LV_ANIM_OFF);
+            lv_obj_set_style_text_color(pack_strip_lbls[pIdx], lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_border_color(pack_strip_btns[pIdx], lv_color_hex(CLR_BORDER), 0);
+        }
     }
 
     // Individual Pack updates
