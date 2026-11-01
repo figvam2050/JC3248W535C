@@ -84,11 +84,26 @@ static lv_obj_t *lbl_delta_val = NULL;
 static lv_obj_t *bar_delta = NULL;
 static lv_obj_t *lbl_delta_extremes = NULL;
 
-// Power Flow Diagram Widgets in Gauge Card
-static lv_obj_t *node_grid = NULL;
-static lv_obj_t *node_inv = NULL;
-static lv_obj_t *node_home = NULL;
-static lv_obj_t *node_bat = NULL;
+// Power Flow Diagram Widgets in Dedicated Card
+static lv_obj_t *flow_card = NULL;
+static lv_obj_t *box_grid = NULL;
+static lv_obj_t *box_inv = NULL;
+static lv_obj_t *box_home = NULL;
+static lv_obj_t *box_bat = NULL;
+
+static lv_obj_t *lbl_grid_icon = NULL;
+static lv_obj_t *lbl_grid_txt = NULL;
+static lv_obj_t *lbl_inv_icon = NULL;
+static lv_obj_t *lbl_inv_txt = NULL;
+static lv_obj_t *lbl_home_icon = NULL;
+static lv_obj_t *lbl_home_txt = NULL;
+static lv_obj_t *lbl_bat_icon = NULL;
+static lv_obj_t *lbl_bat_txt = NULL;
+
+static lv_obj_t *line_grid_inv = NULL;
+static lv_obj_t *line_bat_inv = NULL;
+static lv_obj_t *line_inv_home = NULL;
+
 static lv_obj_t *lbl_flow_arrow_grid = NULL;
 static lv_obj_t *lbl_flow_arrow_bat = NULL;
 static lv_obj_t *lbl_flow_arrow_home = NULL;
@@ -776,30 +791,30 @@ static void build_ui() {
         lv_obj_set_style_radius(pack_strip_bars[i], 2, LV_PART_INDICATOR);
     }
 
-    // 2. Central Gauge Card (Power & SOC)
-    lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 160);
+    // 2. Central Gauge Card (Power & SOC) - Raised Up, 116px height
+    lv_obj_t *gauge_card = create_glass_card(tab_overview, 308, 116);
     lv_obj_align(gauge_card, LV_ALIGN_TOP_MID, 0, 52);
 
-    // SOC Arc (compacted to 112x112 so it doesn't collide with headers)
+    // SOC Arc (100x100 clean arc)
     arc_soc = lv_arc_create(gauge_card);
-    lv_obj_set_size(arc_soc, 112, 112);
+    lv_obj_set_size(arc_soc, 100, 100);
     lv_arc_set_rotation(arc_soc, 135);
     lv_arc_set_bg_angles(arc_soc, 0, 270);
     lv_arc_set_range(arc_soc, 0, 100);
     lv_arc_set_value(arc_soc, 75);
     lv_obj_remove_style(arc_soc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(arc_soc, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_width(arc_soc, 10, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc_soc, 9, LV_PART_MAIN);
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_PANEL_INNER), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc_soc, 10, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc_soc, 9, LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
-    lv_obj_align(arc_soc, LV_ALIGN_LEFT_MID, 4, 4);
+    lv_obj_align(arc_soc, LV_ALIGN_LEFT_MID, 4, 0);
 
     lbl_soc_val = lv_label_create(gauge_card);
     lv_label_set_text(lbl_soc_val, "75%");
     lv_obj_set_style_text_color(lbl_soc_val, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_soc_val, &lv_font_montserrat_24, 0);
-    lv_obj_align_to(lbl_soc_val, arc_soc, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_set_style_text_font(lbl_soc_val, &lv_font_montserrat_20, 0);
+    lv_obj_align_to(lbl_soc_val, arc_soc, LV_ALIGN_CENTER, 0, -6);
 
     lbl_soc_sub = lv_label_create(gauge_card);
     lv_label_set_text(lbl_soc_sub, "STATE OF CHARGE");
@@ -807,10 +822,10 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_soc_sub, &lv_font_montserrat_10, 0);
     lv_obj_align_to(lbl_soc_sub, arc_soc, LV_ALIGN_CENTER, 0, 14);
 
-    // Status pill moved to top right above ACTIVE POWER
+    // Status pill top right
     lbl_mode_pill = lv_label_create(gauge_card);
-    lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " NORMAL OPERATION");
-    lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_EMERALD), 0);
+    lv_label_set_text(lbl_mode_pill, LV_SYMBOL_OK " STANDBY");
+    lv_obj_set_style_text_color(lbl_mode_pill, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_mode_pill, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_mode_pill, LV_ALIGN_TOP_RIGHT, -4, 0);
 
@@ -818,91 +833,161 @@ static void build_ui() {
     lv_label_set_text(lbl_pwr_title, "ACTIVE POWER");
     lv_obj_set_style_text_color(lbl_pwr_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_pwr_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -4, 18);
+    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_RIGHT, -4, 16);
 
     lbl_power_kw = lv_label_create(gauge_card);
-    lv_label_set_text(lbl_power_kw, "1.55 kW");
+    lv_label_set_text(lbl_power_kw, "0.00 kW");
     lv_obj_set_style_text_color(lbl_power_kw, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_power_kw, &lv_font_montserrat_24, 0);
-    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -4, 30);
+    lv_obj_set_style_text_font(lbl_power_kw, &lv_font_montserrat_20, 0);
+    lv_obj_align(lbl_power_kw, LV_ALIGN_TOP_RIGHT, -4, 28);
 
-    // Voltage & Current moved higher up
+    // Voltage & Current in clean columns
     lv_obj_t *lbl_v_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_v_title, "VOLTAGE");
     lv_obj_set_style_text_color(lbl_v_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_v_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_v_title, LV_ALIGN_TOP_RIGHT, -72, 60);
+    lv_obj_align(lbl_v_title, LV_ALIGN_TOP_RIGHT, -86, 62);
 
     lbl_voltage_val = lv_label_create(gauge_card);
-    lv_label_set_text(lbl_voltage_val, "51.72 V");
+    lv_label_set_text(lbl_voltage_val, "51.80 V");
     lv_obj_set_style_text_color(lbl_voltage_val, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_voltage_val, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_voltage_val, LV_ALIGN_TOP_RIGHT, -72, 74);
+    lv_obj_align(lbl_voltage_val, LV_ALIGN_TOP_RIGHT, -86, 76);
 
     lv_obj_t *lbl_i_title = lv_label_create(gauge_card);
     lv_label_set_text(lbl_i_title, "CURRENT");
     lv_obj_set_style_text_color(lbl_i_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_i_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_i_title, LV_ALIGN_TOP_RIGHT, -4, 60);
+    lv_obj_align(lbl_i_title, LV_ALIGN_TOP_RIGHT, -6, 62);
 
     lbl_current_val = lv_label_create(gauge_card);
-    lv_label_set_text(lbl_current_val, "+29.9 A");
+    lv_label_set_text(lbl_current_val, "+0.0 A");
     lv_obj_set_style_text_color(lbl_current_val, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_set_style_text_font(lbl_current_val, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_current_val, LV_ALIGN_TOP_RIGHT, -4, 74);
+    lv_obj_align(lbl_current_val, LV_ALIGN_TOP_RIGHT, -6, 76);
 
-    // Energy Flow Mini-Diagram (Grid -> Inv -> Home, Bat <-> Inv)
-    lv_obj_t *flow_strip = lv_obj_create(gauge_card);
-    lv_obj_set_size(flow_strip, 172, 42);
-    lv_obj_align(flow_strip, LV_ALIGN_BOTTOM_RIGHT, 0, -2);
-    lv_obj_set_style_bg_color(flow_strip, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_border_color(flow_strip, lv_color_hex(CLR_BORDER), 0);
-    lv_obj_set_style_border_width(flow_strip, 1, 0);
-    lv_obj_set_style_radius(flow_strip, 8, 0);
-    lv_obj_set_style_pad_all(flow_strip, 2, 0);
-    lv_obj_clear_flag(flow_strip, LV_OBJ_FLAG_SCROLLABLE);
+    // 3. Dedicated Energy Flow Diagram Card (136px height)
+    // Grid (Top-Left)   -> Inverter (Center) -> Home (Right)
+    // Battery (Bot-Left)^
+    flow_card = create_glass_card(tab_overview, 308, 136);
+    lv_obj_align(flow_card, LV_ALIGN_TOP_MID, 0, 172);
 
-    // Node: GRID
-    node_grid = lv_label_create(flow_strip);
-    lv_label_set_text(node_grid, LV_SYMBOL_CHARGE "\nGRID");
-    lv_obj_set_style_text_align(node_grid, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(node_grid, &lv_font_montserrat_10, 0);
-    lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_align(node_grid, LV_ALIGN_LEFT_MID, 4, 0);
+    // Node: GRID (Top-Left)
+    box_grid = lv_obj_create(flow_card);
+    lv_obj_set_size(box_grid, 68, 50);
+    lv_obj_set_pos(box_grid, 6, 6);
+    lv_obj_set_style_bg_color(box_grid, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_border_width(box_grid, 1, 0);
+    lv_obj_set_style_radius(box_grid, 8, 0);
+    lv_obj_set_style_pad_all(box_grid, 2, 0);
+    lv_obj_clear_flag(box_grid, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Flow Arrow: GRID -> INV
-    lbl_flow_arrow_grid = lv_label_create(flow_strip);
+    lbl_grid_icon = lv_label_create(box_grid);
+    lv_label_set_text(lbl_grid_icon, LV_SYMBOL_CHARGE);
+    lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_grid_icon, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_grid_icon, LV_ALIGN_TOP_MID, 0, 2);
+
+    lbl_grid_txt = lv_label_create(box_grid);
+    lv_label_set_text(lbl_grid_txt, "GRID");
+    lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_grid_txt, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_grid_txt, LV_ALIGN_BOTTOM_MID, 0, -2);
+
+    // Node: BATTERY (Bottom-Left)
+    box_bat = lv_obj_create(flow_card);
+    lv_obj_set_size(box_bat, 68, 50);
+    lv_obj_set_pos(box_bat, 6, 66);
+    lv_obj_set_style_bg_color(box_bat, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_border_width(box_bat, 1, 0);
+    lv_obj_set_style_radius(box_bat, 8, 0);
+    lv_obj_set_style_pad_all(box_bat, 2, 0);
+    lv_obj_clear_flag(box_bat, LV_OBJ_FLAG_SCROLLABLE);
+
+    lbl_bat_icon = lv_label_create(box_bat);
+    lv_label_set_text(lbl_bat_icon, LV_SYMBOL_CHARGE);
+    lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_bat_icon, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_bat_icon, LV_ALIGN_TOP_MID, 0, 2);
+
+    lbl_bat_txt = lv_label_create(box_bat);
+    lv_label_set_text(lbl_bat_txt, "BATTERY");
+    lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_bat_txt, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_bat_txt, LV_ALIGN_BOTTOM_MID, 0, -2);
+
+    // Arrow Grid -> Inv
+    lbl_flow_arrow_grid = lv_label_create(flow_card);
     lv_label_set_text(lbl_flow_arrow_grid, "->");
-    lv_obj_set_style_text_font(lbl_flow_arrow_grid, &lv_font_montserrat_10, 0);
     lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_align(lbl_flow_arrow_grid, LV_ALIGN_LEFT_MID, 38, 0);
+    lv_obj_set_style_text_font(lbl_flow_arrow_grid, &lv_font_montserrat_12, 0);
+    lv_obj_set_pos(lbl_flow_arrow_grid, 82, 22);
 
-    // Node: INV
-    node_inv = lv_label_create(flow_strip);
-    lv_label_set_text(node_inv, LV_SYMBOL_SETTINGS "\nINV");
-    lv_obj_set_style_text_align(node_inv, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(node_inv, &lv_font_montserrat_10, 0);
-    lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_align(node_inv, LV_ALIGN_CENTER, -6, 0);
+    // Arrow Bat <-> Inv
+    lbl_flow_arrow_bat = lv_label_create(flow_card);
+    lv_label_set_text(lbl_flow_arrow_bat, "->");
+    lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_flow_arrow_bat, &lv_font_montserrat_12, 0);
+    lv_obj_set_pos(lbl_flow_arrow_bat, 82, 82);
 
-    // Flow Arrow: INV <-> BAT / HOME
-    lbl_flow_arrow_home = lv_label_create(flow_strip);
+    // Node: INVERTER (Center)
+    box_inv = lv_obj_create(flow_card);
+    lv_obj_set_size(box_inv, 78, 64);
+    lv_obj_set_pos(box_inv, 110, 30);
+    lv_obj_set_style_bg_color(box_inv, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(box_inv, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_border_width(box_inv, 1, 0);
+    lv_obj_set_style_radius(box_inv, 10, 0);
+    lv_obj_set_style_pad_all(box_inv, 2, 0);
+    lv_obj_clear_flag(box_inv, LV_OBJ_FLAG_SCROLLABLE);
+
+    lbl_inv_icon = lv_label_create(box_inv);
+    lv_label_set_text(lbl_inv_icon, LV_SYMBOL_SETTINGS);
+    lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_inv_icon, &lv_font_montserrat_16, 0);
+    lv_obj_align(lbl_inv_icon, LV_ALIGN_TOP_MID, 0, 4);
+
+    lbl_inv_txt = lv_label_create(box_inv);
+    lv_label_set_text(lbl_inv_txt, "INVERTER");
+    lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_inv_txt, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_inv_txt, LV_ALIGN_BOTTOM_MID, 0, -4);
+
+    // Arrow Inv -> Home
+    lbl_flow_arrow_home = lv_label_create(flow_card);
     lv_label_set_text(lbl_flow_arrow_home, "->");
-    lv_obj_set_style_text_font(lbl_flow_arrow_home, &lv_font_montserrat_10, 0);
-    lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_align(lbl_flow_arrow_home, LV_ALIGN_RIGHT_MID, -36, 0);
+    lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_flow_arrow_home, &lv_font_montserrat_12, 0);
+    lv_obj_set_pos(lbl_flow_arrow_home, 196, 52);
 
-    // Node: HOME
-    node_home = lv_label_create(flow_strip);
-    lv_label_set_text(node_home, LV_SYMBOL_HOME "\nHOME");
-    lv_obj_set_style_text_align(node_home, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(node_home, &lv_font_montserrat_10, 0);
-    lv_obj_set_style_text_color(node_home, lv_color_white(), 0);
-    lv_obj_align(node_home, LV_ALIGN_RIGHT_MID, -4, 0);
+    // Node: HOME (Right)
+    box_home = lv_obj_create(flow_card);
+    lv_obj_set_size(box_home, 72, 64);
+    lv_obj_set_pos(box_home, 222, 30);
+    lv_obj_set_style_bg_color(box_home, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(box_home, 1, 0);
+    lv_obj_set_style_radius(box_home, 10, 0);
+    lv_obj_set_style_pad_all(box_home, 2, 0);
+    lv_obj_clear_flag(box_home, LV_OBJ_FLAG_SCROLLABLE);
 
-    // 3. Dynamic Alarm Banner
-    card_alarm_banner = create_glass_card(tab_overview, 308, 48);
-    lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 216);
+    lbl_home_icon = lv_label_create(box_home);
+    lv_label_set_text(lbl_home_icon, LV_SYMBOL_HOME);
+    lv_obj_set_style_text_color(lbl_home_icon, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_home_icon, &lv_font_montserrat_16, 0);
+    lv_obj_align(lbl_home_icon, LV_ALIGN_TOP_MID, 0, 4);
+
+    lbl_home_txt = lv_label_create(box_home);
+    lv_label_set_text(lbl_home_txt, "HOME");
+    lv_obj_set_style_text_color(lbl_home_txt, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_home_txt, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_home_txt, LV_ALIGN_BOTTOM_MID, 0, -4);
+
+    // 4. Dynamic Alarm Banner (44px)
+    card_alarm_banner = create_glass_card(tab_overview, 308, 44);
+    lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 314);
     lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0);
     lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_EMERALD), 0);
     lv_obj_clear_flag(card_alarm_banner, LV_OBJ_FLAG_SCROLLABLE);
@@ -925,42 +1010,10 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_alarm_details, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_alarm_details, LV_ALIGN_BOTTOM_LEFT, 26, 2);
 
-    // 4. Bank Health & Delta Card
-    lv_obj_t *health_card = create_glass_card(tab_overview, 308, 86);
-    lv_obj_align(health_card, LV_ALIGN_TOP_MID, 0, 268);
-
-    lv_obj_t *h_title = lv_label_create(health_card);
-    lv_label_set_text(h_title, "BANK CELL BALANCE (DELTA)");
-    lv_obj_set_style_text_color(h_title, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(h_title, &lv_font_montserrat_10, 0);
-    lv_obj_align(h_title, LV_ALIGN_TOP_LEFT, 2, 0);
-
-    lbl_delta_val = lv_label_create(health_card);
-    lv_label_set_text(lbl_delta_val, "50 mV");
-    lv_obj_set_style_text_color(lbl_delta_val, lv_color_hex(CLR_AMBER), 0);
-    lv_obj_set_style_text_font(lbl_delta_val, &lv_font_montserrat_18, 0);
-    lv_obj_align(lbl_delta_val, LV_ALIGN_TOP_RIGHT, -2, -4);
-
-    bar_delta = lv_bar_create(health_card);
-    lv_obj_set_size(bar_delta, 290, 8);
-    lv_obj_align(bar_delta, LV_ALIGN_CENTER, 0, 4);
-    lv_bar_set_range(bar_delta, 0, 100);
-    lv_bar_set_value(bar_delta, 50, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(bar_delta, lv_color_hex(CLR_PANEL_INNER), 0);
-    lv_obj_set_style_bg_color(bar_delta, lv_color_hex(CLR_AMBER), LV_PART_INDICATOR);
-    lv_obj_set_style_radius(bar_delta, 4, 0);
-    lv_obj_set_style_radius(bar_delta, 4, LV_PART_INDICATOR);
-
-    lbl_delta_extremes = lv_label_create(health_card);
-    lv_label_set_text(lbl_delta_extremes, "Min: 3.413 V  |  Max: 3.463 V");
-    lv_obj_set_style_text_color(lbl_delta_extremes, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(lbl_delta_extremes, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_delta_extremes, LV_ALIGN_BOTTOM_LEFT, 2, -2);
-
-    // 5. Clean SD Log Card at Bottom
-    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 48);
-    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 358);
-    lv_obj_set_style_pad_all(info_card, 4, 0);
+    // 5. Clean SD Log Card at Bottom (46px)
+    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 46);
+    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 364);
+    lv_obj_set_style_pad_all(info_card, 3, 0);
 
     btn_bank_log = lv_btn_create(info_card);
     lv_obj_set_size(btn_bank_log, 298, 38);
@@ -1092,32 +1145,83 @@ static void update_ui() {
     const char* arrow_anim_fwd[3] = {"- >", "-- >", "->>"};
     const char* arrow_anim_rev[3] = {"< -", "< --", "<<-"};
 
-    if (node_grid && node_inv && node_home) {
+    if (box_grid && box_inv && box_home && box_bat) {
         if (iSum > 0.5f) {
             // Charging: Grid -> Inverter -> Battery & Home
-            lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_EMERALD), 0);
-            lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_EMERALD), 0);
-            lv_obj_set_style_text_color(node_home, lv_color_white(), 0);
+            lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_EMERALD), 0);
+
+            lv_obj_set_style_border_color(box_inv, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(CLR_EMERALD), 0);
+
+            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_EMERALD), 0);
+            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_EMERALD), 0);
+
+            lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_BORDER), 0);
+            lv_obj_set_style_text_color(lbl_home_icon, lv_color_white(), 0);
+            lv_obj_set_style_text_color(lbl_home_txt, lv_color_white(), 0);
+
             lv_label_set_text(lbl_flow_arrow_grid, arrow_anim_fwd[s_flow_anim_step]);
             lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_EMERALD), 0);
-            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]);
+
+            lv_label_set_text(lbl_flow_arrow_bat, arrow_anim_rev[s_flow_anim_step]); // Inv -> Bat
+            lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_EMERALD), 0);
+
+            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]); // Inv -> Home
             lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_EMERALD), 0);
         } else if (iSum < -0.5f) {
             // Discharging: Battery -> Inverter -> Home (Off-grid / Outage)
-            lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
-            lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_BLUE), 0);
-            lv_obj_set_style_text_color(node_home, lv_color_hex(CLR_CYAN), 0);
+            lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_BORDER), 0);
+            lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_TEXT_MUTED), 0);
+
+            lv_obj_set_style_border_color(box_inv, lv_color_hex(CLR_BLUE), 0);
+            lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(CLR_BLUE), 0);
+            lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(CLR_BLUE), 0);
+
+            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_BLUE), 0);
+            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_BLUE), 0);
+            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_BLUE), 0);
+
+            lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_CYAN), 0);
+            lv_obj_set_style_text_color(lbl_home_icon, lv_color_hex(CLR_CYAN), 0);
+            lv_obj_set_style_text_color(lbl_home_txt, lv_color_hex(CLR_CYAN), 0);
+
             lv_label_set_text(lbl_flow_arrow_grid, "x");
             lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
-            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]);
+
+            lv_label_set_text(lbl_flow_arrow_bat, arrow_anim_fwd[s_flow_anim_step]); // Bat -> Inv
+            lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_CYAN), 0);
+
+            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]); // Inv -> Home
             lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_CYAN), 0);
         } else {
             // Idle / Standby
-            lv_obj_set_style_text_color(node_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
-            lv_obj_set_style_text_color(node_inv, lv_color_hex(CLR_TEXT_MUTED), 0);
-            lv_obj_set_style_text_color(node_home, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_border_color(box_grid, lv_color_hex(CLR_BORDER), 0);
+            lv_obj_set_style_text_color(lbl_grid_icon, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_TEXT_MUTED), 0);
+
+            lv_obj_set_style_border_color(box_inv, lv_color_hex(CLR_BORDER), 0);
+            lv_obj_set_style_text_color(lbl_inv_icon, lv_color_hex(CLR_TEXT_MUTED), 0);
+            lv_obj_set_style_text_color(lbl_inv_txt, lv_color_hex(CLR_TEXT_MUTED), 0);
+
+            lv_obj_set_style_border_color(box_bat, lv_color_hex(CLR_BORDER), 0);
+            lv_obj_set_style_text_color(lbl_bat_icon, lv_color_hex(CLR_CYAN), 0);
+            lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_CYAN), 0);
+
+            lv_obj_set_style_border_color(box_home, lv_color_hex(CLR_BORDER), 0);
+            lv_obj_set_style_text_color(lbl_home_icon, lv_color_white(), 0);
+            lv_obj_set_style_text_color(lbl_home_txt, lv_color_white(), 0);
+
             lv_label_set_text(lbl_flow_arrow_grid, "--");
             lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
+
+            lv_label_set_text(lbl_flow_arrow_bat, "--");
+            lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_TEXT_MUTED), 0);
+
             lv_label_set_text(lbl_flow_arrow_home, "--");
             lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_TEXT_MUTED), 0);
         }
@@ -1167,21 +1271,14 @@ static void update_ui() {
         lv_obj_set_style_text_color(lbl_current_val, lv_color_white(), 0);
     }
 
-    snprintf(buf, sizeof(buf), "%u mV", globalDeltaMv);
-    lv_label_set_text(lbl_delta_val, buf);
-    lv_bar_set_value(bar_delta, globalDeltaMv > 100 ? 100 : globalDeltaMv, LV_ANIM_ON);
-    if (globalDeltaMv > 50) {
-        lv_obj_set_style_bg_color(bar_delta, lv_color_hex(CLR_ROSE), LV_PART_INDICATOR);
-        lv_obj_set_style_text_color(lbl_delta_val, lv_color_hex(CLR_ROSE), 0);
-    } else if (globalDeltaMv > 25) {
-        lv_obj_set_style_bg_color(bar_delta, lv_color_hex(CLR_AMBER), LV_PART_INDICATOR);
-        lv_obj_set_style_text_color(lbl_delta_val, lv_color_hex(CLR_AMBER), 0);
-    } else {
-        lv_obj_set_style_bg_color(bar_delta, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
-        lv_obj_set_style_text_color(lbl_delta_val, lv_color_hex(CLR_EMERALD), 0);
+    if (lbl_delta_val) {
+        snprintf(buf, sizeof(buf), "%u mV", globalDeltaMv);
+        lv_label_set_text(lbl_delta_val, buf);
     }
-
-    if (count > 0 && gMax >= gMin) {
+    if (bar_delta) {
+        lv_bar_set_value(bar_delta, globalDeltaMv > 100 ? 100 : globalDeltaMv, LV_ANIM_ON);
+    }
+    if (lbl_delta_extremes && count > 0 && gMax >= gMin) {
         snprintf(buf, sizeof(buf), "Min: %.3f V  |  Max: %.3f V", gMin / 1000.0f, gMax / 1000.0f);
         lv_label_set_text(lbl_delta_extremes, buf);
     }
@@ -1403,6 +1500,8 @@ void setup() {
     lv_indev_drv_init(&indev_drv);
     indev_drv.type = LV_INDEV_TYPE_POINTER;
     indev_drv.read_cb = my_touchpad_read;
+    indev_drv.scroll_limit = 4; // High sensitivity for snappy swiping
+    indev_drv.scroll_throw = 25; // Smooth inertial swipe fling
     lv_indev_drv_register(&indev_drv);
 
     BmsAudio.begin();
