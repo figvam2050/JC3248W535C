@@ -868,12 +868,12 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_top_power_src, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_top_power_src, LV_ALIGN_RIGHT_MID, -2, 0);
 
-    // Right Side: IP + Wi-Fi RSSI (Larger Font 12px)
+    // Right Side: IP + Wi-Fi RSSI (Larger Font 12px, moved comfortably left of USB icon)
     lbl_top_ip = lv_label_create(top_nav_bar);
     lv_label_set_text(lbl_top_ip, "...");
     lv_obj_set_style_text_color(lbl_top_ip, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_top_ip, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -20, 0);
+    lv_obj_align(lbl_top_ip, LV_ALIGN_RIGHT_MID, -30, 0);
 
     // Create TabView with tab_size = 0 (completely disables default button matrix header!)
     tabview = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 0);
