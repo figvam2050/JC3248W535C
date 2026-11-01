@@ -133,11 +133,27 @@ static lv_obj_t *tab_settings = NULL;
 static lv_obj_t *slider_brightness = NULL;
 static lv_obj_t *lbl_bright_val = NULL;
 static lv_obj_t *dropdown_timeout = NULL;
+static lv_obj_t *dropdown_sleep_mode = NULL;
 static lv_obj_t *sw_sound = NULL;
 static lv_obj_t *sw_autolog = NULL;
 static uint8_t s_current_brightness = BRIGHTNESS_HIGH;
 static bool s_sound_enabled = true;
 static uint32_t s_screen_off_timeout_ms = 60000; // Default: 1 minute (0 = Never)
+
+enum ScreenSleepMode {
+    SLEEP_MODE_OFF = 0,    // 100% Turn off backlight
+    SLEEP_MODE_DIM = 1,    // Dim to 15% (night glow)
+    SLEEP_MODE_SAVER = 2   // Clock & Power Minimal Screensaver
+};
+static ScreenSleepMode s_sleep_mode = SLEEP_MODE_SAVER;
+
+// Fullscreen Screensaver Overlay
+static lv_obj_t *screensaver_overlay = NULL;
+static lv_obj_t *lbl_ss_time = NULL;
+static lv_obj_t *lbl_ss_soc = NULL;
+static lv_obj_t *lbl_ss_pwr = NULL;
+static lv_obj_t *lbl_ss_grid = NULL;
+static uint32_t s_ss_burnin_step = 0;
 
 static void update_top_nav_state(uint16_t act_idx) {
     if (!btn_nav_settings || !btn_nav_all || !btn_nav_logs) return;
@@ -378,6 +394,9 @@ static bool touch_read_hw(uint16_t &x, uint16_t &y) {
         if (s_is_screen_dimmed) {
             s_is_screen_dimmed = false;
             set_backlight_brightness(s_current_brightness);
+            if (screensaver_overlay) {
+                lv_obj_add_flag(screensaver_overlay, LV_OBJ_FLAG_HIDDEN);
+            }
         }
 
         static uint32_t s_last_click_ms = 0;
@@ -696,13 +715,21 @@ static void dropdown_timeout_cb(lv_event_t *e) {
     BmsAudio.playClick();
 }
 
+static void dropdown_sleep_mode_cb(lv_event_t *e) {
+    lv_obj_t *dropdown = lv_event_get_target(e);
+    uint16_t selected = lv_dropdown_get_selected(dropdown);
+    // 0: Off 100%, 1: Dim 15%, 2: Clock Screensaver
+    s_sleep_mode = (ScreenSleepMode)selected;
+    BmsAudio.playClick();
+}
+
 static void create_settings_tab() {
     tab_settings = lv_tabview_add_tab(tabview, "Settings");
     lv_obj_set_style_bg_color(tab_settings, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_settings, 6, 0);
 
-    // 1. Display & Brightness Card (Enlarged to 142px to host Screen Off Dropdown)
-    lv_obj_t *card_disp = create_glass_card(tab_settings, 308, 142);
+    // 1. Display & Brightness Card (Enlarged to 186px for Timeout + Sleep Mode Dropdowns)
+    lv_obj_t *card_disp = create_glass_card(tab_settings, 308, 186);
     lv_obj_align(card_disp, LV_ALIGN_TOP_MID, 0, 0);
 
     lv_obj_t *lbl_disp_title = lv_label_create(card_disp);
@@ -719,7 +746,7 @@ static void create_settings_tab() {
 
     slider_brightness = lv_slider_create(card_disp);
     lv_obj_set_size(slider_brightness, 280, 14);
-    lv_obj_set_pos(slider_brightness, 6, 26);
+    lv_obj_set_pos(slider_brightness, 6, 24);
     lv_slider_set_range(slider_brightness, 20, 255);
     lv_slider_set_value(slider_brightness, s_current_brightness, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(slider_brightness, lv_color_hex(CLR_PANEL_INNER), 0);
@@ -727,16 +754,16 @@ static void create_settings_tab() {
     lv_obj_set_style_bg_color(slider_brightness, lv_color_white(), LV_PART_KNOB);
     lv_obj_add_event_cb(slider_brightness, slider_brightness_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // Screen Sleep / 100% Turn Off Dropdown
+    // Screen Sleep Timeout Label & Dropdown
     lv_obj_t *lbl_sleep_title = lv_label_create(card_disp);
-    lv_label_set_text(lbl_sleep_title, LV_SYMBOL_POWER " SCREEN TIMEOUT (100% OFF):");
+    lv_label_set_text(lbl_sleep_title, LV_SYMBOL_POWER " SLEEP TIMEOUT:");
     lv_obj_set_style_text_color(lbl_sleep_title, lv_color_hex(CLR_TEXT_MUTED), 0);
     lv_obj_set_style_text_font(lbl_sleep_title, &lv_font_montserrat_10, 0);
-    lv_obj_set_pos(lbl_sleep_title, 2, 54);
+    lv_obj_set_pos(lbl_sleep_title, 2, 48);
 
     dropdown_timeout = lv_dropdown_create(card_disp);
-    lv_obj_set_size(dropdown_timeout, 280, 36);
-    lv_obj_set_pos(dropdown_timeout, 6, 72);
+    lv_obj_set_size(dropdown_timeout, 280, 32);
+    lv_obj_set_pos(dropdown_timeout, 6, 64);
     lv_dropdown_set_options(dropdown_timeout, 
         "30 Seconds\n"
         "1 Minute\n"
@@ -752,9 +779,32 @@ static void create_settings_tab() {
     lv_obj_set_style_radius(dropdown_timeout, 8, 0);
     lv_obj_add_event_cb(dropdown_timeout, dropdown_timeout_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    // Screen Sleep Mode Action Label & Dropdown
+    lv_obj_t *lbl_mode_title = lv_label_create(card_disp);
+    lv_label_set_text(lbl_mode_title, LV_SYMBOL_IMAGE " SLEEP ACTION / SCREENSAVER:");
+    lv_obj_set_style_text_color(lbl_mode_title, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_mode_title, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_mode_title, 2, 106);
+
+    dropdown_sleep_mode = lv_dropdown_create(card_disp);
+    lv_obj_set_size(dropdown_sleep_mode, 280, 32);
+    lv_obj_set_pos(dropdown_sleep_mode, 6, 122);
+    lv_dropdown_set_options(dropdown_sleep_mode, 
+        "Screen Off 100% (Dark)\n"
+        "Dim 15% (Night Glow)\n"
+        "Clock Screensaver"
+    );
+    lv_dropdown_set_selected(dropdown_sleep_mode, 2); // Default: Clock Screensaver
+    lv_obj_set_style_bg_color(dropdown_sleep_mode, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(dropdown_sleep_mode, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_text_color(dropdown_sleep_mode, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(dropdown_sleep_mode, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_radius(dropdown_sleep_mode, 8, 0);
+    lv_obj_add_event_cb(dropdown_sleep_mode, dropdown_sleep_mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
     // 2. Audio & Notifications Card
-    lv_obj_t *card_audio = create_glass_card(tab_settings, 308, 54);
-    lv_obj_align(card_audio, LV_ALIGN_TOP_MID, 0, 148);
+    lv_obj_t *card_audio = create_glass_card(tab_settings, 308, 52);
+    lv_obj_align(card_audio, LV_ALIGN_TOP_MID, 0, 192);
 
     lv_obj_t *lbl_audio_title = lv_label_create(card_audio);
     lv_label_set_text(lbl_audio_title, LV_SYMBOL_AUDIO " TOUCH CLICKS & BEEP");
@@ -770,8 +820,8 @@ static void create_settings_tab() {
     lv_obj_add_event_cb(sw_sound, sw_sound_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // 3. System & Network Diagnostics Card
-    lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 185);
-    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 208);
+    lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 150);
+    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 250);
 
     lv_obj_t *lbl_sys_title = lv_label_create(card_sys);
     lv_label_set_text(lbl_sys_title, LV_SYMBOL_SETTINGS " SYSTEM & RS485 SPECS");
@@ -1243,6 +1293,64 @@ static void build_ui() {
     lv_obj_set_style_text_color(lbl_bank_log, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_bank_log, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_bank_log, LV_ALIGN_CENTER, 0, 0);
+
+    // 6. Create Fullscreen Screensaver Overlay (added on top layer)
+    screensaver_overlay = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(screensaver_overlay, 320, 480);
+    lv_obj_set_pos(screensaver_overlay, 0, 0);
+    lv_obj_set_style_bg_color(screensaver_overlay, lv_color_hex(CLR_DARK_BG), 0);
+    lv_obj_set_style_bg_opa(screensaver_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(screensaver_overlay, 0, 0);
+    lv_obj_set_style_radius(screensaver_overlay, 0, 0);
+    lv_obj_set_style_pad_all(screensaver_overlay, 0, 0);
+    lv_obj_clear_flag(screensaver_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(screensaver_overlay, LV_OBJ_FLAG_CLICKABLE); // Any tap dismisses it!
+    lv_obj_add_flag(screensaver_overlay, LV_OBJ_FLAG_HIDDEN); // Hidden by default
+
+    // Touch event on screensaver wakes up screen
+    lv_obj_add_event_cb(screensaver_overlay, [](lv_event_t *e) {
+        s_is_screen_dimmed = false;
+        set_backlight_brightness(s_current_brightness);
+        if (screensaver_overlay) {
+            lv_obj_add_flag(screensaver_overlay, LV_OBJ_FLAG_HIDDEN);
+        }
+        BmsAudio.playClick();
+    }, LV_EVENT_CLICKED, NULL);
+
+    // Large Night Clock (Centered)
+    lbl_ss_time = lv_label_create(screensaver_overlay);
+    lv_label_set_text(lbl_ss_time, "12:00");
+    lv_obj_set_style_text_color(lbl_ss_time, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_ss_time, &lv_font_montserrat_24, 0);
+    lv_obj_align(lbl_ss_time, LV_ALIGN_CENTER, 0, -40);
+
+    // Battery SOC Glance
+    lbl_ss_soc = lv_label_create(screensaver_overlay);
+    lv_label_set_text(lbl_ss_soc, LV_SYMBOL_BATTERY_FULL " 100% (51.8V)");
+    lv_obj_set_style_text_color(lbl_ss_soc, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_ss_soc, &lv_font_montserrat_16, 0);
+    lv_obj_align(lbl_ss_soc, LV_ALIGN_CENTER, 0, 8);
+
+    // Power Glance
+    lbl_ss_pwr = lv_label_create(screensaver_overlay);
+    lv_label_set_text(lbl_ss_pwr, "0.00 kW");
+    lv_obj_set_style_text_color(lbl_ss_pwr, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_ss_pwr, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_ss_pwr, LV_ALIGN_CENTER, 0, 36);
+
+    // Grid Status Glance
+    lbl_ss_grid = lv_label_create(screensaver_overlay);
+    lv_label_set_text(lbl_ss_grid, LV_SYMBOL_CHARGE " 230V GRID ON");
+    lv_obj_set_style_text_color(lbl_ss_grid, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_ss_grid, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_ss_grid, LV_ALIGN_CENTER, 0, 68);
+
+    // Hint at bottom
+    lv_obj_t *lbl_ss_hint = lv_label_create(screensaver_overlay);
+    lv_label_set_text(lbl_ss_hint, "Tap anywhere to wake up");
+    lv_obj_set_style_text_color(lbl_ss_hint, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_ss_hint, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_ss_hint, LV_ALIGN_BOTTOM_MID, 0, -18);
 }
 
 static void update_ui() {
@@ -1524,6 +1632,25 @@ static void update_ui() {
     if (lbl_delta_extremes && count > 0 && gMax >= gMin) {
         snprintf(buf, sizeof(buf), "Min: %.3f V  |  Max: %.3f V", gMin / 1000.0f, gMax / 1000.0f);
         lv_label_set_text(lbl_delta_extremes, buf);
+    }
+
+    // Update live values on Screensaver glance overlay
+    if (screensaver_overlay) {
+        char ssBuf[36];
+        snprintf(ssBuf, sizeof(ssBuf), "%s %.0f%% (%.1fV)", LV_SYMBOL_BATTERY_FULL, avgSoc, avgVolt);
+        lv_label_set_text(lbl_ss_soc, ssBuf);
+
+        snprintf(ssBuf, sizeof(ssBuf), "%.2f kW", fabsf(totalPwrKw));
+        lv_label_set_text(lbl_ss_pwr, ssBuf);
+
+        bool gridOk = (iSum > -0.5f);
+        if (gridOk) {
+            lv_label_set_text(lbl_ss_grid, LV_SYMBOL_CHARGE " 230V GRID ON");
+            lv_obj_set_style_text_color(lbl_ss_grid, lv_color_hex(CLR_EMERALD), 0);
+        } else {
+            lv_label_set_text(lbl_ss_grid, LV_SYMBOL_WARNING " OUTAGE (OFF-GRID)");
+            lv_obj_set_style_text_color(lbl_ss_grid, lv_color_hex(CLR_ROSE), 0);
+        }
     }
 
     // Dynamic layout adaptation for Pack Selector Strip based on actual online pack count
@@ -1828,9 +1955,43 @@ void setup() {
 void loop() {
     lv_timer_handler();
 
+    // Screen sleep timeout check
     if (!s_is_screen_dimmed && s_screen_off_timeout_ms > 0 && (millis() - s_last_touch_time > s_screen_off_timeout_ms)) {
         s_is_screen_dimmed = true;
-        set_backlight_brightness(0); // 100% Turn off backlight
+        if (s_sleep_mode == SLEEP_MODE_OFF) {
+            set_backlight_brightness(0); // 100% Turn off backlight
+        } else if (s_sleep_mode == SLEEP_MODE_DIM) {
+            set_backlight_brightness(25); // Dim to ~15% night glow
+        } else if (s_sleep_mode == SLEEP_MODE_SAVER) {
+            set_backlight_brightness(35); // Low night glow for screensaver
+            if (screensaver_overlay) {
+                lv_obj_clear_flag(screensaver_overlay, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+
+    // Screensaver periodic burn-in shift & live time update
+    if (s_is_screen_dimmed && s_sleep_mode == SLEEP_MODE_SAVER && screensaver_overlay) {
+        static uint32_t last_ss_tick = 0;
+        if (millis() - last_ss_tick >= 1000) {
+            last_ss_tick = millis();
+            
+            // Format time from system millis or uptime
+            uint32_t sec = millis() / 1000;
+            uint32_t min = (sec / 60) % 60;
+            uint32_t hr = (sec / 3600) % 24;
+            char tBuf[16];
+            snprintf(tBuf, sizeof(tBuf), "%02u:%02u", hr, min);
+            lv_label_set_text(lbl_ss_time, tBuf);
+
+            // Subtle burn-in protection shift every 30 seconds
+            s_ss_burnin_step++;
+            if ((s_ss_burnin_step % 30) == 0) {
+                int shift_x = (s_ss_burnin_step % 60 == 0) ? 12 : -12;
+                int shift_y = (s_ss_burnin_step % 90 == 0) ? -32 : -44;
+                lv_obj_align(lbl_ss_time, LV_ALIGN_CENTER, shift_x, shift_y);
+            }
+        }
     }
 
     static uint32_t last_ui_update = 0;
