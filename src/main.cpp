@@ -157,7 +157,8 @@ static uint32_t s_screen_off_timeout_ms = 60000; // Default: 1 minute (0 = Never
 enum ScreenSleepMode {
     SLEEP_MODE_OFF = 0,    // 100% Turn off backlight
     SLEEP_MODE_DIM = 1,    // Dim to 15% (night glow)
-    SLEEP_MODE_SAVER = 2   // Clock & Power Minimal Screensaver
+    SLEEP_MODE_SAVER = 2,  // Clock & Power Minimal Screensaver
+    SLEEP_MODE_ORB = 3     // Energy Orb / Battery HUD Screensaver
 };
 static ScreenSleepMode s_sleep_mode = SLEEP_MODE_SAVER;
 
@@ -174,6 +175,14 @@ static lv_obj_t *lbl_ss_time = NULL;
 static lv_obj_t *lbl_ss_soc = NULL;
 static lv_obj_t *lbl_ss_pwr = NULL;
 static lv_obj_t *lbl_ss_grid = NULL;
+
+// Energy Orb Screensaver Widgets
+static lv_obj_t *ss_orb_cluster = NULL;
+static lv_obj_t *arc_ss_orb = NULL;
+static lv_obj_t *lbl_ss_orb_val = NULL;
+static lv_obj_t *lbl_ss_orb_sub = NULL;
+static lv_obj_t *lbl_ss_orb_pwr = NULL;
+
 static uint32_t s_ss_burnin_step = 0;
 
 static void update_top_nav_state(uint16_t act_idx) {
@@ -879,7 +888,8 @@ static void create_settings_tab() {
     lv_dropdown_set_options(dropdown_sleep_mode, 
         "Screen Off 100% (Dark)\n"
         "Dim 15% (Night Glow)\n"
-        "Clock Screensaver"
+        "Clock Screensaver\n"
+        "Energy Orb HUD"
     );
     lv_dropdown_set_selected(dropdown_sleep_mode, 2); // Default: Clock Screensaver
     lv_obj_set_style_bg_color(dropdown_sleep_mode, lv_color_hex(CLR_PANEL_INNER), 0);
@@ -1650,6 +1660,49 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_ss_grid, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_ss_grid, LV_ALIGN_TOP_MID, 0, 134);
 
+    // Energy Orb Screensaver Cluster (Alternative Style: 200x200)
+    ss_orb_cluster = lv_obj_create(screensaver_overlay);
+    lv_obj_set_size(ss_orb_cluster, 200, 200);
+    lv_obj_set_pos(ss_orb_cluster, 60, 120);
+    lv_obj_set_style_bg_opa(ss_orb_cluster, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(ss_orb_cluster, 0, 0);
+    lv_obj_set_style_pad_all(ss_orb_cluster, 0, 0);
+    lv_obj_clear_flag(ss_orb_cluster, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(ss_orb_cluster, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_flag(ss_orb_cluster, LV_OBJ_FLAG_HIDDEN); // Hidden unless in ORB mode
+
+    arc_ss_orb = lv_arc_create(ss_orb_cluster);
+    lv_obj_set_size(arc_ss_orb, 180, 180);
+    lv_arc_set_rotation(arc_ss_orb, 135);
+    lv_arc_set_bg_angles(arc_ss_orb, 0, 270);
+    lv_arc_set_range(arc_ss_orb, 0, 100);
+    lv_arc_set_value(arc_ss_orb, 75);
+    lv_obj_remove_style(arc_ss_orb, NULL, LV_PART_KNOB);
+    lv_obj_clear_flag(arc_ss_orb, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_width(arc_ss_orb, 14, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc_ss_orb, lv_color_hex(0x0F172A), LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc_ss_orb, 14, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(arc_ss_orb, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR);
+    lv_obj_align(arc_ss_orb, LV_ALIGN_CENTER, 0, 0);
+
+    lbl_ss_orb_val = lv_label_create(ss_orb_cluster);
+    lv_label_set_text(lbl_ss_orb_val, "75%");
+    lv_obj_set_style_text_color(lbl_ss_orb_val, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_ss_orb_val, &lv_font_montserrat_28, 0);
+    lv_obj_align(lbl_ss_orb_val, LV_ALIGN_CENTER, 0, -14);
+
+    lbl_ss_orb_sub = lv_label_create(ss_orb_cluster);
+    lv_label_set_text(lbl_ss_orb_sub, "BATTERY HUD");
+    lv_obj_set_style_text_color(lbl_ss_orb_sub, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_ss_orb_sub, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_ss_orb_sub, LV_ALIGN_CENTER, 0, 16);
+
+    lbl_ss_orb_pwr = lv_label_create(ss_orb_cluster);
+    lv_label_set_text(lbl_ss_orb_pwr, "+1.85 kW");
+    lv_obj_set_style_text_color(lbl_ss_orb_pwr, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_ss_orb_pwr, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_ss_orb_pwr, LV_ALIGN_CENTER, 0, 36);
+
     // Hint at bottom
     lv_obj_t *lbl_ss_hint = lv_label_create(screensaver_overlay);
     lv_label_set_text(lbl_ss_hint, "Tap anywhere to wake up");
@@ -2008,6 +2061,22 @@ static void update_ui() {
             lv_label_set_text(lbl_ss_grid, LV_SYMBOL_WARNING " OUTAGE (OFF-GRID)");
             lv_obj_set_style_text_color(lbl_ss_grid, lv_color_hex(CLR_ROSE), 0);
         }
+
+        // Update Energy Orb screensaver values
+        if (arc_ss_orb && lbl_ss_orb_val && lbl_ss_orb_pwr) {
+            lv_arc_set_value(arc_ss_orb, (int32_t)avgSoc);
+            uint32_t orbColor = (avgSoc < 20.0f) ? CLR_ROSE : ((iSum > 0.5f) ? CLR_AMBER : CLR_EMERALD);
+            lv_obj_set_style_arc_color(arc_ss_orb, lv_color_hex(orbColor), LV_PART_INDICATOR);
+
+            char orbBuf[16];
+            snprintf(orbBuf, sizeof(orbBuf), "%.0f%%", avgSoc);
+            lv_label_set_text(lbl_ss_orb_val, orbBuf);
+
+            char pwrBuf[24];
+            snprintf(pwrBuf, sizeof(pwrBuf), "%+.2f kW", totalPwrKw);
+            lv_label_set_text(lbl_ss_orb_pwr, pwrBuf);
+            lv_obj_set_style_text_color(lbl_ss_orb_pwr, lv_color_hex(orbColor), 0);
+        }
     }
 
     // Dynamic layout adaptation for Pack Selector Strip based on actual online pack count
@@ -2356,16 +2425,23 @@ void loop() {
             set_backlight_brightness(0); // 100% Turn off backlight
         } else if (s_sleep_mode == SLEEP_MODE_DIM) {
             set_backlight_brightness(25); // Dim to ~15% night glow
-        } else if (s_sleep_mode == SLEEP_MODE_SAVER) {
+        } else if (s_sleep_mode == SLEEP_MODE_SAVER || s_sleep_mode == SLEEP_MODE_ORB) {
             set_backlight_brightness(35); // Low night glow for screensaver
             if (screensaver_overlay) {
                 lv_obj_clear_flag(screensaver_overlay, LV_OBJ_FLAG_HIDDEN);
+                if (s_sleep_mode == SLEEP_MODE_ORB) {
+                    if (screensaver_cluster) lv_obj_add_flag(screensaver_cluster, LV_OBJ_FLAG_HIDDEN);
+                    if (ss_orb_cluster) lv_obj_clear_flag(ss_orb_cluster, LV_OBJ_FLAG_HIDDEN);
+                } else {
+                    if (ss_orb_cluster) lv_obj_add_flag(ss_orb_cluster, LV_OBJ_FLAG_HIDDEN);
+                    if (screensaver_cluster) lv_obj_clear_flag(screensaver_cluster, LV_OBJ_FLAG_HIDDEN);
+                }
             }
         }
     }
 
     // Screensaver periodic floating/roaming & live time update
-    if (s_is_screen_dimmed && s_sleep_mode == SLEEP_MODE_SAVER && screensaver_overlay) {
+    if (s_is_screen_dimmed && (s_sleep_mode == SLEEP_MODE_SAVER || s_sleep_mode == SLEEP_MODE_ORB) && screensaver_overlay) {
         static uint32_t last_ss_tick = 0;
         if (millis() - last_ss_tick >= 1000) {
             last_ss_tick = millis();
@@ -2382,16 +2458,22 @@ void loop() {
                 uint32_t hr = (sec / 3600) % 24;
                 snprintf(tBuf, sizeof(tBuf), "%02u:%02u", hr, min);
             }
-            lv_label_set_text(lbl_ss_time, tBuf);
+            if (lbl_ss_time) lv_label_set_text(lbl_ss_time, tBuf);
 
-            // Dynamic random roaming motion across the screen every 10 seconds!
+            // Dynamic random roaming motion across the screen every 10 seconds for burn-in protection!
             s_ss_burnin_step++;
-            if ((s_ss_burnin_step % 10) == 0 && screensaver_cluster) {
-                // Screen is 320x480. Cluster is 260x200.
-                // Random X in range [8 .. 52], Random Y in range [20 .. 250]
-                int rand_x = 8 + (esp_random() % 45);
-                int rand_y = 20 + (esp_random() % 230);
-                lv_obj_set_pos(screensaver_cluster, rand_x, rand_y);
+            if ((s_ss_burnin_step % 10) == 0) {
+                if (s_sleep_mode == SLEEP_MODE_SAVER && screensaver_cluster) {
+                    // Screen is 320x480. Cluster is 260x200.
+                    int rand_x = 8 + (esp_random() % 45);
+                    int rand_y = 20 + (esp_random() % 230);
+                    lv_obj_set_pos(screensaver_cluster, rand_x, rand_y);
+                } else if (s_sleep_mode == SLEEP_MODE_ORB && ss_orb_cluster) {
+                    // Orb cluster is 200x200. Random roaming across 320x480
+                    int rand_x = 10 + (esp_random() % 105);
+                    int rand_y = 20 + (esp_random() % 230);
+                    lv_obj_set_pos(ss_orb_cluster, rand_x, rand_y);
+                }
             }
         }
     }
