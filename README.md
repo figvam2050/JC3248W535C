@@ -213,6 +213,13 @@
 
 ## 🛠️ 7. Апаратне підключення (Pinout)
 
+<p align="center">
+  <img src="docs/images/board_connectors_spec.jpg" alt="Розташування та призначення роз'ємів JC3248W535" width="100%">
+  <br><em>Апаратні роз'єми плати Guition JC3248W535 (Type-C, RS485 P1 JST 1.25, BAT 2P, TF Slot, Speaker, Boot/Reset)</em>
+</p>
+
+> ℹ️ Детальний покроковий сервісний посібник з електричного підключення до шини інвертора та акумуляторів дивіться у файлі **[HARDWARE_SERVICE_GUIDE.md](HARDWARE_SERVICE_GUIDE.md)**.
+
 ### Дисплей (AXS15231B QSPI):
 - `LCD_CS`: **GPIO 45**
 - `LCD_SCLK`: **GPIO 47**
