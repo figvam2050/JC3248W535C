@@ -120,13 +120,26 @@ static lv_obj_t *top_nav_bar = NULL;
 static lv_obj_t *btn_nav_settings = NULL;
 static lv_obj_t *lbl_nav_settings = NULL;
 static lv_obj_t *btn_nav_all = NULL;
+static lv_obj_t *btn_nav_charts = NULL;
 static lv_obj_t *btn_nav_logs = NULL;
 static lv_obj_t *lbl_nav_all = NULL;
+static lv_obj_t *lbl_nav_charts = NULL;
 static lv_obj_t *lbl_nav_logs = NULL;
+
+// Dedicated Charts Tab Widgets
+static lv_obj_t *tab_charts = NULL;
+static lv_obj_t *chart_pwr = NULL;
+static lv_chart_series_t *ser_pwr = NULL;
+static lv_chart_series_t *ser_cur = NULL;
+static lv_obj_t *lbl_chart_pwr_val = NULL;
+static lv_obj_t *chart_delta = NULL;
+static lv_chart_series_t *ser_delta = NULL;
+static lv_obj_t *lbl_chart_delta_val = NULL;
 
 // Dynamic Pack Tabs mapping
 static uint8_t s_active_pack_count = 4; // Tracks current number of active packs
-static uint16_t s_logs_tab_index = 2;   // Always points to the Logs tab index
+static uint16_t s_charts_tab_index = 2; // Tab 2 is Charts
+static uint16_t s_logs_tab_index = 3;   // Logs tab index (after Charts and Packs)
 static lv_obj_t *pack_strip_card = NULL;
 
 // Dedicated Settings Tab Widgets
@@ -164,7 +177,7 @@ static lv_obj_t *lbl_ss_grid = NULL;
 static uint32_t s_ss_burnin_step = 0;
 
 static void update_top_nav_state(uint16_t act_idx) {
-    if (!btn_nav_settings || !btn_nav_all || !btn_nav_logs) return;
+    if (!btn_nav_settings || !btn_nav_all || !btn_nav_charts || !btn_nav_logs) return;
 
     // Reset all buttons to default inactive style
     lv_obj_set_style_bg_color(btn_nav_settings, lv_color_hex(CLR_PANEL_INNER), 0);
@@ -174,6 +187,10 @@ static void update_top_nav_state(uint16_t act_idx) {
     lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_text_color(lbl_nav_all, lv_color_hex(CLR_TEXT_MUTED), 0);
+
+    lv_obj_set_style_bg_color(btn_nav_charts, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_nav_charts, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_text_color(lbl_nav_charts, lv_color_hex(CLR_TEXT_MUTED), 0);
 
     lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_logs, lv_color_hex(CLR_BORDER), 0);
@@ -189,6 +206,11 @@ static void update_top_nav_state(uint16_t act_idx) {
         lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(0x164E63), 0);
         lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_CYAN), 0);
         lv_obj_set_style_text_color(lbl_nav_all, lv_color_hex(CLR_CYAN), 0);
+    } else if (act_idx == s_charts_tab_index) {
+        // "Charts" active
+        lv_obj_set_style_bg_color(btn_nav_charts, lv_color_hex(0x164E63), 0);
+        lv_obj_set_style_border_color(btn_nav_charts, lv_color_hex(CLR_CYAN), 0);
+        lv_obj_set_style_text_color(lbl_nav_charts, lv_color_hex(CLR_CYAN), 0);
     } else if (act_idx == s_logs_tab_index) {
         // "Logs" active (always dynamically mapped to the last tab)
         lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(0x164E63), 0);
@@ -213,6 +235,14 @@ static void nav_all_click_cb(lv_event_t *e) {
     }
 }
 
+static void nav_charts_click_cb(lv_event_t *e) {
+    if (tabview) {
+        lv_tabview_set_act(tabview, s_charts_tab_index, LV_ANIM_ON);
+        update_top_nav_state(s_charts_tab_index);
+        BmsAudio.playClick();
+    }
+}
+
 static void nav_logs_click_cb(lv_event_t *e) {
     if (tabview) {
         lv_tabview_set_act(tabview, s_logs_tab_index, LV_ANIM_ON);
@@ -230,8 +260,8 @@ static void tabview_change_cb(lv_event_t *e) {
 
 static void pack_strip_click_cb(lv_event_t *e) {
     uintptr_t idx = (uintptr_t)lv_event_get_user_data(e);
-    // Tab 0: Settings, Tab 1: Home, Tab 2..(2 + activePacks - 1): Packs, Last Tab: Logs
-    uint16_t targetTab = idx + 2;
+    // Tab 0: Settings, Tab 1: Home, Tab 2: Charts, Tab 3..(3 + activePacks - 1): Packs, Last Tab: Logs
+    uint16_t targetTab = idx + 3;
     if (tabview) {
         lv_tabview_set_act(tabview, targetTab, LV_ANIM_ON);
         update_top_nav_state(targetTab);
@@ -993,6 +1023,75 @@ static void create_settings_tab() {
     lv_obj_align(lbl_info, LV_ALIGN_TOP_LEFT, 4, 22);
 }
 
+static void create_charts_tab() {
+    tab_charts = lv_tabview_add_tab(tabview, "Charts");
+    lv_obj_set_style_bg_color(tab_charts, lv_color_hex(CLR_DARK_BG), 0);
+    lv_obj_set_style_pad_all(tab_charts, 6, 0);
+
+    // 1. Live Active Power & Current Chart Card (205px)
+    lv_obj_t *card_pwr_chart = create_glass_card(tab_charts, 308, 205);
+    lv_obj_align(card_pwr_chart, LV_ALIGN_TOP_MID, 0, 0);
+
+    lv_obj_t *lbl_pwr_title = lv_label_create(card_pwr_chart);
+    lv_label_set_text(lbl_pwr_title, LV_SYMBOL_CHARGE " POWER & CURRENT TREND");
+    lv_obj_set_style_text_color(lbl_pwr_title, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_pwr_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_pwr_title, LV_ALIGN_TOP_LEFT, 2, 0);
+
+    lbl_chart_pwr_val = lv_label_create(card_pwr_chart);
+    lv_label_set_text(lbl_chart_pwr_val, "0.00 kW | 0.0 A");
+    lv_obj_set_style_text_color(lbl_chart_pwr_val, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_chart_pwr_val, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_chart_pwr_val, LV_ALIGN_TOP_RIGHT, -4, 0);
+
+    chart_pwr = lv_chart_create(card_pwr_chart);
+    lv_obj_set_size(chart_pwr, 284, 155);
+    lv_obj_set_pos(chart_pwr, 4, 24);
+    lv_chart_set_type(chart_pwr, LV_CHART_TYPE_LINE);
+    lv_chart_set_update_mode(chart_pwr, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_point_count(chart_pwr, 30); // 30 data points
+    lv_chart_set_range(chart_pwr, LV_CHART_AXIS_PRIMARY_Y, -100, 100); // Scaled for kW * 10
+    lv_obj_set_style_bg_color(chart_pwr, lv_color_hex(0x020617), 0);
+    lv_obj_set_style_border_color(chart_pwr, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(chart_pwr, 1, 0);
+    lv_obj_set_style_radius(chart_pwr, 8, 0);
+    lv_obj_set_style_pad_all(chart_pwr, 2, 0);
+
+    ser_pwr = lv_chart_add_series(chart_pwr, lv_color_hex(CLR_CYAN), LV_CHART_AXIS_PRIMARY_Y);
+    ser_cur = lv_chart_add_series(chart_pwr, lv_color_hex(CLR_AMBER), LV_CHART_AXIS_PRIMARY_Y);
+
+    // 2. Cell Delta Imbalance Chart Card (205px)
+    lv_obj_t *card_delta_chart = create_glass_card(tab_charts, 308, 205);
+    lv_obj_align(card_delta_chart, LV_ALIGN_TOP_MID, 0, 212);
+
+    lv_obj_t *lbl_delta_title = lv_label_create(card_delta_chart);
+    lv_label_set_text(lbl_delta_title, LV_SYMBOL_WARNING " CELL DELTA (mV) TREND");
+    lv_obj_set_style_text_color(lbl_delta_title, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_text_font(lbl_delta_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_delta_title, LV_ALIGN_TOP_LEFT, 2, 0);
+
+    lbl_chart_delta_val = lv_label_create(card_delta_chart);
+    lv_label_set_text(lbl_chart_delta_val, "Delta: 0 mV");
+    lv_obj_set_style_text_color(lbl_chart_delta_val, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_chart_delta_val, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_chart_delta_val, LV_ALIGN_TOP_RIGHT, -4, 0);
+
+    chart_delta = lv_chart_create(card_delta_chart);
+    lv_obj_set_size(chart_delta, 284, 155);
+    lv_obj_set_pos(chart_delta, 4, 24);
+    lv_chart_set_type(chart_delta, LV_CHART_TYPE_LINE);
+    lv_chart_set_update_mode(chart_delta, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_point_count(chart_delta, 30);
+    lv_chart_set_range(chart_delta, LV_CHART_AXIS_PRIMARY_Y, 0, 150); // 0 to 150 mV range
+    lv_obj_set_style_bg_color(chart_delta, lv_color_hex(0x020617), 0);
+    lv_obj_set_style_border_color(chart_delta, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(chart_delta, 1, 0);
+    lv_obj_set_style_radius(chart_delta, 8, 0);
+    lv_obj_set_style_pad_all(chart_delta, 2, 0);
+
+    ser_delta = lv_chart_add_series(chart_delta, lv_color_hex(CLR_EMERALD), LV_CHART_AXIS_PRIMARY_Y);
+}
+
 static void create_logs_tab() {
     tab_logs = lv_tabview_add_tab(tabview, "Logs");
     lv_obj_set_style_bg_color(tab_logs, lv_color_hex(CLR_DARK_BG), 0);
@@ -1089,10 +1188,10 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_nav_settings, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl_nav_settings, LV_ALIGN_CENTER, 0, 0);
 
-    // 2. Button "Home" (former "All") - widened to 48x28
+    // 2. Button "Home" - 44x28
     btn_nav_all = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_all, 48, 28);
-    lv_obj_align(btn_nav_all, LV_ALIGN_LEFT_MID, 36, 0);
+    lv_obj_set_size(btn_nav_all, 44, 28);
+    lv_obj_align(btn_nav_all, LV_ALIGN_LEFT_MID, 35, 0);
     lv_obj_set_style_bg_color(btn_nav_all, lv_color_hex(0x164E63), 0);
     lv_obj_set_style_border_color(btn_nav_all, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_border_width(btn_nav_all, 1, 0);
@@ -1103,13 +1202,30 @@ static void build_ui() {
     lbl_nav_all = lv_label_create(btn_nav_all);
     lv_label_set_text(lbl_nav_all, "Home");
     lv_obj_set_style_text_color(lbl_nav_all, lv_color_hex(CLR_CYAN), 0);
-    lv_obj_set_style_text_font(lbl_nav_all, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lbl_nav_all, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_nav_all, LV_ALIGN_CENTER, 0, 0);
 
-    // 3. Button "Logs" - widened to 48x28
+    // 3. Button "Chart" - 44x28
+    btn_nav_charts = lv_btn_create(top_nav_bar);
+    lv_obj_set_size(btn_nav_charts, 44, 28);
+    lv_obj_align(btn_nav_charts, LV_ALIGN_LEFT_MID, 81, 0);
+    lv_obj_set_style_bg_color(btn_nav_charts, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_nav_charts, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(btn_nav_charts, 1, 0);
+    lv_obj_set_style_radius(btn_nav_charts, 6, 0);
+    lv_obj_set_style_pad_all(btn_nav_charts, 0, 0);
+    lv_obj_add_event_cb(btn_nav_charts, nav_charts_click_cb, LV_EVENT_CLICKED, NULL);
+
+    lbl_nav_charts = lv_label_create(btn_nav_charts);
+    lv_label_set_text(lbl_nav_charts, "Chart");
+    lv_obj_set_style_text_color(lbl_nav_charts, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_nav_charts, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_nav_charts, LV_ALIGN_CENTER, 0, 0);
+
+    // 4. Button "Logs" - 42x28
     btn_nav_logs = lv_btn_create(top_nav_bar);
-    lv_obj_set_size(btn_nav_logs, 48, 28);
-    lv_obj_align(btn_nav_logs, LV_ALIGN_LEFT_MID, 87, 0);
+    lv_obj_set_size(btn_nav_logs, 42, 28);
+    lv_obj_align(btn_nav_logs, LV_ALIGN_LEFT_MID, 127, 0);
     lv_obj_set_style_bg_color(btn_nav_logs, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_nav_logs, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(btn_nav_logs, 1, 0);
@@ -1120,7 +1236,7 @@ static void build_ui() {
     lbl_nav_logs = lv_label_create(btn_nav_logs);
     lv_label_set_text(lbl_nav_logs, "Logs");
     lv_obj_set_style_text_color(lbl_nav_logs, lv_color_hex(CLR_TEXT_MUTED), 0);
-    lv_obj_set_style_text_font(lbl_nav_logs, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lbl_nav_logs, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_nav_logs, LV_ALIGN_CENTER, 0, 0);
 
     // Right Side: Power Source Icon (USB) - fixed position at far right
@@ -1152,14 +1268,18 @@ static void build_ui() {
     lv_obj_set_style_bg_color(tab_overview, lv_color_hex(CLR_DARK_BG), 0);
     lv_obj_set_style_pad_all(tab_overview, 6, 0);
 
-    // Create Initial Battery Pack Tabs (Tabs 2 .. 2+N-1)
+    // Create Live Dynamic Charts Tab (Tab 2)
+    create_charts_tab();
+    s_charts_tab_index = 2;
+
+    // Create Initial Battery Pack Tabs (Tabs 3 .. 3+N-1)
     for (uint8_t i = 0; i < s_active_pack_count; i++) {
         create_battery_tab(i);
     }
 
     // Create Dedicated Logs Tab as the LAST Tab
     create_logs_tab();
-    s_logs_tab_index = 2 + s_active_pack_count;
+    s_logs_tab_index = 3 + s_active_pack_count;
 
     // Default active tab is "Home" (Tab 1)
     lv_tabview_set_act(tabview, 1, LV_ANIM_OFF);
@@ -2101,6 +2221,39 @@ static void update_ui() {
                 lv_obj_set_style_border_color(ui.cell_boxes[c], lv_color_hex(CLR_BORDER), 0);
                 lv_obj_set_style_text_color(ui.lbl_cell_volt[c], lv_color_white(), 0);
                 lv_obj_set_style_bg_color(ui.cell_bars[c], lv_color_hex(CLR_CYAN), LV_PART_INDICATOR);
+            }
+        }
+    }
+
+    // Update Live Charts (every ~1s sampling)
+    static uint32_t last_chart_sample_ms = 0;
+    if (chart_pwr && chart_delta && (millis() - last_chart_sample_ms >= 1000)) {
+        last_chart_sample_ms = millis();
+
+        // 1. Power (kW * 10) & Current (Amps)
+        int16_t pwrVal = (int16_t)(totalPwrKw * 10.0f); // e.g. 3.2 kW = 32
+        int16_t curVal = (int16_t)iSum;                 // e.g. 59 A
+        lv_chart_set_next_value(chart_pwr, ser_pwr, pwrVal);
+        lv_chart_set_next_value(chart_pwr, ser_cur, curVal);
+
+        if (lbl_chart_pwr_val) {
+            char pwrValBuf[36];
+            snprintf(pwrValBuf, sizeof(pwrValBuf), "%+.2fkW | %+.1fA", totalPwrKw, iSum);
+            lv_label_set_text(lbl_chart_pwr_val, pwrValBuf);
+        }
+
+        // 2. Cell Delta (mV)
+        int16_t deltaVal = (int16_t)globalDeltaMv;
+        lv_chart_set_next_value(chart_delta, ser_delta, deltaVal);
+
+        if (lbl_chart_delta_val) {
+            char deltaValBuf[32];
+            snprintf(deltaValBuf, sizeof(deltaValBuf), "Delta: %u mV", globalDeltaMv);
+            lv_label_set_text(lbl_chart_delta_val, deltaValBuf);
+            if (globalDeltaMv > 50) {
+                lv_obj_set_style_text_color(lbl_chart_delta_val, lv_color_hex(CLR_ROSE), 0);
+            } else {
+                lv_obj_set_style_text_color(lbl_chart_delta_val, lv_color_white(), 0);
             }
         }
     }
