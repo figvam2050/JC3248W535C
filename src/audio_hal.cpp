@@ -85,3 +85,14 @@ void AudioAlert::playAlarm() {
     }
 }
 
+void AudioAlert::playTestMelody() {
+    // Elegant ascending polyphonic chime (C5 -> E5 -> G5 -> C6)
+    playBeep(523, 70);
+    delay(20);
+    playBeep(659, 70);
+    delay(20);
+    playBeep(784, 80);
+    delay(20);
+    playBeep(1046, 150);
+}
+

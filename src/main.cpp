@@ -148,6 +148,12 @@ enum ScreenSleepMode {
 };
 static ScreenSleepMode s_sleep_mode = SLEEP_MODE_SAVER;
 
+// Settings Controls & Widgets
+static lv_obj_t *sw_demo = NULL;
+static lv_obj_t *dropdown_delta_thresh = NULL;
+static lv_obj_t *lbl_wifi_scan_res = NULL;
+static uint16_t s_alert_delta_thresh_mv = 50; // Default 50mV
+
 // Fullscreen Screensaver Overlay
 static lv_obj_t *screensaver_overlay = NULL;
 static lv_obj_t *screensaver_cluster = NULL;
@@ -237,6 +243,12 @@ static lv_obj_t *card_alarm_banner = NULL;
 static lv_obj_t *lbl_alarm_icon = NULL;
 static lv_obj_t *lbl_alarm_title = NULL;
 static lv_obj_t *lbl_alarm_details = NULL;
+
+// ETA Autonomy Card Widgets on Overview
+static lv_obj_t *card_eta = NULL;
+static lv_obj_t *lbl_eta_icon = NULL;
+static lv_obj_t *lbl_eta_title = NULL;
+static lv_obj_t *lbl_eta_val = NULL;
 
 // SD Rec Button Widgets on Overview
 static lv_obj_t *btn_bank_log = NULL;
@@ -725,6 +737,49 @@ static void dropdown_sleep_mode_cb(lv_event_t *e) {
     BmsAudio.playClick();
 }
 
+static void sw_demo_cb(lv_event_t *e) {
+    lv_obj_t *sw = lv_event_get_target(e);
+    Sniffer.demoMode = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    if (s_sound_enabled) BmsAudio.playClick();
+}
+
+static void btn_audio_test_cb(lv_event_t *e) {
+    BmsAudio.playTestMelody();
+}
+
+static void btn_wifi_scan_cb(lv_event_t *e) {
+    if (s_sound_enabled) BmsAudio.playClick();
+    if (!lbl_wifi_scan_res) return;
+
+    lv_label_set_text(lbl_wifi_scan_res, "Scanning Wi-Fi...");
+    int n = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+    if (n <= 0) {
+        lv_label_set_text(lbl_wifi_scan_res, "No Wi-Fi networks found");
+    } else {
+        String res = "Found " + String(n) + " nets:\n";
+        int limit = (n > 4) ? 4 : n;
+        for (int i = 0; i < limit; i++) {
+            res += String(i + 1) + ". " + WiFi.SSID(i) + " (" + String(WiFi.RSSI(i)) + "dBm)\n";
+        }
+        if (n > 4) res += "...and " + String(n - 4) + " more";
+        lv_label_set_text(lbl_wifi_scan_res, res.c_str());
+    }
+}
+
+static void dropdown_delta_thresh_cb(lv_event_t *e) {
+    lv_obj_t *dd = lv_event_get_target(e);
+    uint16_t sel = lv_dropdown_get_selected(dd);
+    // Options: 0: 30 mV, 1: 50 mV, 2: 80 mV, 3: 100 mV
+    switch (sel) {
+        case 0: s_alert_delta_thresh_mv = 30; break;
+        case 1: s_alert_delta_thresh_mv = 50; break;
+        case 2: s_alert_delta_thresh_mv = 80; break;
+        case 3: s_alert_delta_thresh_mv = 100; break;
+        default: s_alert_delta_thresh_mv = 50; break;
+    }
+    if (s_sound_enabled) BmsAudio.playClick();
+}
+
 static void create_settings_tab() {
     tab_settings = lv_tabview_add_tab(tabview, "Settings");
     lv_obj_set_style_bg_color(tab_settings, lv_color_hex(CLR_DARK_BG), 0);
@@ -804,29 +859,121 @@ static void create_settings_tab() {
     lv_obj_set_style_radius(dropdown_sleep_mode, 8, 0);
     lv_obj_add_event_cb(dropdown_sleep_mode, dropdown_sleep_mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // 2. Audio & Notifications Card
-    lv_obj_t *card_audio = create_glass_card(tab_settings, 308, 52);
+    // 2. Audio & Notifications Card (Enlarged to 88px for Test Audio button)
+    lv_obj_t *card_audio = create_glass_card(tab_settings, 308, 88);
     lv_obj_align(card_audio, LV_ALIGN_TOP_MID, 0, 192);
 
     lv_obj_t *lbl_audio_title = lv_label_create(card_audio);
-    lv_label_set_text(lbl_audio_title, LV_SYMBOL_AUDIO " TOUCH CLICKS & BEEP");
+    lv_label_set_text(lbl_audio_title, LV_SYMBOL_AUDIO " SOUND & FEEDBACK");
     lv_obj_set_style_text_color(lbl_audio_title, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_audio_title, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_audio_title, LV_ALIGN_LEFT_MID, 2, 0);
+    lv_obj_align(lbl_audio_title, LV_ALIGN_TOP_LEFT, 2, 2);
 
     sw_sound = lv_switch_create(card_audio);
-    lv_obj_set_size(sw_sound, 50, 26);
-    lv_obj_align(sw_sound, LV_ALIGN_RIGHT_MID, -2, 0);
+    lv_obj_set_size(sw_sound, 48, 24);
+    lv_obj_align(sw_sound, LV_ALIGN_TOP_RIGHT, -4, 0);
     if (s_sound_enabled) lv_obj_add_state(sw_sound, LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(sw_sound, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_add_event_cb(sw_sound, sw_sound_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // 3. System & Network Diagnostics Card
-    lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 150);
-    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 250);
+    lv_obj_t *btn_audio_test = lv_btn_create(card_audio);
+    lv_obj_set_size(btn_audio_test, 280, 32);
+    lv_obj_align(btn_audio_test, LV_ALIGN_BOTTOM_MID, 0, -4);
+    lv_obj_set_style_bg_color(btn_audio_test, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_audio_test, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_border_width(btn_audio_test, 1, 0);
+    lv_obj_set_style_radius(btn_audio_test, 8, 0);
+    lv_obj_add_event_cb(btn_audio_test, btn_audio_test_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_audio_btn = lv_label_create(btn_audio_test);
+    lv_label_set_text(lbl_audio_btn, LV_SYMBOL_PLAY " PLAY TEST CHIME");
+    lv_obj_set_style_text_color(lbl_audio_btn, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_audio_btn, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_audio_btn, LV_ALIGN_CENTER, 0, 0);
+
+    // 3. Simulation & Protection Thresholds Card (116px)
+    lv_obj_t *card_sim = create_glass_card(tab_settings, 308, 116);
+    lv_obj_align(card_sim, LV_ALIGN_TOP_MID, 0, 286);
+
+    lv_obj_t *lbl_sim_title = lv_label_create(card_sim);
+    lv_label_set_text(lbl_sim_title, LV_SYMBOL_REFRESH " SIMULATION & ALARM LIMITS");
+    lv_obj_set_style_text_color(lbl_sim_title, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_sim_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_sim_title, LV_ALIGN_TOP_LEFT, 2, 2);
+
+    lv_obj_t *lbl_demo_name = lv_label_create(card_sim);
+    lv_label_set_text(lbl_demo_name, "DEMO / SIMULATION MODE:");
+    lv_obj_set_style_text_color(lbl_demo_name, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_demo_name, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_demo_name, 2, 26);
+
+    sw_demo = lv_switch_create(card_sim);
+    lv_obj_set_size(sw_demo, 48, 22);
+    lv_obj_set_pos(sw_demo, 236, 22);
+    if (Sniffer.demoMode) lv_obj_add_state(sw_demo, LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(sw_demo, lv_color_hex(CLR_AMBER), LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(sw_demo, sw_demo_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *lbl_thresh_title = lv_label_create(card_sim);
+    lv_label_set_text(lbl_thresh_title, "BUZZER DELTA THRESHOLD:");
+    lv_obj_set_style_text_color(lbl_thresh_title, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_thresh_title, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_thresh_title, 2, 54);
+
+    dropdown_delta_thresh = lv_dropdown_create(card_sim);
+    lv_obj_set_size(dropdown_delta_thresh, 280, 30);
+    lv_obj_set_pos(dropdown_delta_thresh, 4, 72);
+    lv_dropdown_set_options(dropdown_delta_thresh,
+        "Delta > 30 mV (Strict)\n"
+        "Delta > 50 mV (Standard)\n"
+        "Delta > 80 mV (Relaxed)\n"
+        "Delta > 100 mV (Critical)"
+    );
+    lv_dropdown_set_selected(dropdown_delta_thresh, 1); // 50 mV default
+    lv_obj_set_style_bg_color(dropdown_delta_thresh, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(dropdown_delta_thresh, lv_color_hex(CLR_BORDER), 0);
+    lv_obj_set_style_text_color(dropdown_delta_thresh, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(dropdown_delta_thresh, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_radius(dropdown_delta_thresh, 8, 0);
+    lv_obj_add_event_cb(dropdown_delta_thresh, dropdown_delta_thresh_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // 4. Wi-Fi Scanner & Network Card (126px)
+    lv_obj_t *card_wifi = create_glass_card(tab_settings, 308, 126);
+    lv_obj_align(card_wifi, LV_ALIGN_TOP_MID, 0, 408);
+
+    lv_obj_t *lbl_wifi_title = lv_label_create(card_wifi);
+    lv_label_set_text(lbl_wifi_title, LV_SYMBOL_WIFI " WI-FI SCANNER");
+    lv_obj_set_style_text_color(lbl_wifi_title, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_wifi_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_wifi_title, LV_ALIGN_TOP_LEFT, 2, 2);
+
+    lv_obj_t *btn_wifi_scan = lv_btn_create(card_wifi);
+    lv_obj_set_size(btn_wifi_scan, 110, 26);
+    lv_obj_align(btn_wifi_scan, LV_ALIGN_TOP_RIGHT, -4, 0);
+    lv_obj_set_style_bg_color(btn_wifi_scan, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(btn_wifi_scan, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_border_width(btn_wifi_scan, 1, 0);
+    lv_obj_set_style_radius(btn_wifi_scan, 6, 0);
+    lv_obj_add_event_cb(btn_wifi_scan, btn_wifi_scan_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *lbl_btn_scan = lv_label_create(btn_wifi_scan);
+    lv_label_set_text(lbl_btn_scan, LV_SYMBOL_REFRESH " SCAN");
+    lv_obj_set_style_text_color(lbl_btn_scan, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_btn_scan, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_btn_scan, LV_ALIGN_CENTER, 0, 0);
+
+    lbl_wifi_scan_res = lv_label_create(card_wifi);
+    lv_label_set_text(lbl_wifi_scan_res, "Click SCAN to discover nearby Wi-Fi networks");
+    lv_obj_set_style_text_color(lbl_wifi_scan_res, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_wifi_scan_res, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_wifi_scan_res, 4, 30);
+
+    // 5. System & Network Diagnostics Card (140px)
+    lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 140);
+    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 540);
 
     lv_obj_t *lbl_sys_title = lv_label_create(card_sys);
-    lv_label_set_text(lbl_sys_title, LV_SYMBOL_SETTINGS " SYSTEM & RS485 SPECS");
+    lv_label_set_text(lbl_sys_title, LV_SYMBOL_SETTINGS " HARDWARE SPECIFICATION");
     lv_obj_set_style_text_color(lbl_sys_title, lv_color_hex(CLR_CYAN), 0);
     lv_obj_set_style_text_font(lbl_sys_title, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_sys_title, LV_ALIGN_TOP_LEFT, 2, 0);
@@ -837,8 +984,8 @@ static void create_settings_tab() {
         "MCU: ESP32-S3 Dual-Core 240MHz\n"
         "Bus: Passive RS485 Sniffer (9600 8N1)\n"
         "SD Card: FAT32 Class 10 SD_MMC\n"
-        "Firmware: UI v2.0 Ultra (Custom Flow)\n"
-        "WiFi Gateway: WebSockets + REST API\n"
+        "Firmware: UI v2.5 Innovation Flow\n"
+        "NTP: Europe/Kyiv (Auto DST)\n"
         "Protection: Passive Read-Only Sniffer"
     );
     lv_obj_set_style_text_color(lbl_info, lv_color_hex(CLR_TEXT_MUTED), 0);
@@ -1251,49 +1398,75 @@ static void build_ui() {
     lv_obj_set_style_text_font(lbl_home_txt, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_home_txt, LV_ALIGN_BOTTOM_MID, 0, -4);
 
-    // 4. Dynamic Alarm Banner (44px)
-    card_alarm_banner = create_glass_card(tab_overview, 308, 44);
-    lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 314);
+    // 4. Compact Dynamic Alarm Banner (36px)
+    card_alarm_banner = create_glass_card(tab_overview, 308, 36);
+    lv_obj_align(card_alarm_banner, LV_ALIGN_TOP_MID, 0, 312);
     lv_obj_set_style_bg_color(card_alarm_banner, lv_color_hex(0x064E3B), 0);
     lv_obj_set_style_border_color(card_alarm_banner, lv_color_hex(CLR_EMERALD), 0);
+    lv_obj_set_style_pad_all(card_alarm_banner, 4, 0);
     lv_obj_clear_flag(card_alarm_banner, LV_OBJ_FLAG_SCROLLABLE);
 
     lbl_alarm_icon = lv_label_create(card_alarm_banner);
     lv_label_set_text(lbl_alarm_icon, LV_SYMBOL_OK);
     lv_obj_set_style_text_color(lbl_alarm_icon, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_alarm_icon, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(lbl_alarm_icon, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_alarm_icon, LV_ALIGN_LEFT_MID, 4, 0);
 
     lbl_alarm_title = lv_label_create(card_alarm_banner);
     lv_label_set_text(lbl_alarm_title, "SYSTEM STATUS: ALL OK");
     lv_obj_set_style_text_color(lbl_alarm_title, lv_color_hex(CLR_EMERALD), 0);
-    lv_obj_set_style_text_font(lbl_alarm_title, &lv_font_montserrat_12, 0);
-    lv_obj_align(lbl_alarm_title, LV_ALIGN_TOP_LEFT, 26, -2);
+    lv_obj_set_style_text_font(lbl_alarm_title, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_alarm_title, LV_ALIGN_TOP_LEFT, 24, 0);
 
     lbl_alarm_details = lv_label_create(card_alarm_banner);
     lv_label_set_text(lbl_alarm_details, "No active warnings, protections or faults");
     lv_obj_set_style_text_color(lbl_alarm_details, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_alarm_details, &lv_font_montserrat_10, 0);
-    lv_obj_align(lbl_alarm_details, LV_ALIGN_BOTTOM_LEFT, 26, 2);
+    lv_obj_align(lbl_alarm_details, LV_ALIGN_BOTTOM_LEFT, 24, 0);
 
-    // 5. Clean SD Log Card at Bottom (46px)
-    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 46);
-    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 364);
-    lv_obj_set_style_pad_all(info_card, 3, 0);
+    // 5. Autonomy & Energy ETA Card (34px)
+    card_eta = create_glass_card(tab_overview, 308, 34);
+    lv_obj_align(card_eta, LV_ALIGN_TOP_MID, 0, 352);
+    lv_obj_set_style_pad_all(card_eta, 3, 0);
+    lv_obj_set_style_bg_color(card_eta, lv_color_hex(CLR_PANEL_INNER), 0);
+    lv_obj_set_style_border_color(card_eta, lv_color_hex(CLR_BORDER), 0);
+
+    lbl_eta_icon = lv_label_create(card_eta);
+    lv_label_set_text(lbl_eta_icon, LV_SYMBOL_CHARGE);
+    lv_obj_set_style_text_color(lbl_eta_icon, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_eta_icon, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_eta_icon, LV_ALIGN_LEFT_MID, 4, 0);
+
+    lbl_eta_title = lv_label_create(card_eta);
+    lv_label_set_text(lbl_eta_title, "AUTONOMY:");
+    lv_obj_set_style_text_color(lbl_eta_title, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_eta_title, &lv_font_montserrat_10, 0);
+    lv_obj_align(lbl_eta_title, LV_ALIGN_LEFT_MID, 22, 0);
+
+    lbl_eta_val = lv_label_create(card_eta);
+    lv_label_set_text(lbl_eta_val, "Calculating ETA...");
+    lv_obj_set_style_text_color(lbl_eta_val, lv_color_white(), 0);
+    lv_obj_set_style_text_font(lbl_eta_val, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_eta_val, LV_ALIGN_RIGHT_MID, -6, 0);
+
+    // 6. Clean SD Log Card at Bottom (38px)
+    lv_obj_t *info_card = create_glass_card(tab_overview, 308, 38);
+    lv_obj_align(info_card, LV_ALIGN_TOP_MID, 0, 390);
+    lv_obj_set_style_pad_all(info_card, 2, 0);
 
     btn_bank_log = lv_btn_create(info_card);
-    lv_obj_set_size(btn_bank_log, 298, 38);
+    lv_obj_set_size(btn_bank_log, 300, 32);
     lv_obj_align(btn_bank_log, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(btn_bank_log, lv_color_hex(CLR_PANEL_INNER), 0);
     lv_obj_set_style_border_color(btn_bank_log, lv_color_hex(CLR_BORDER), 0);
     lv_obj_set_style_border_width(btn_bank_log, 1, 0);
-    lv_obj_set_style_radius(btn_bank_log, 10, 0);
+    lv_obj_set_style_radius(btn_bank_log, 8, 0);
     lv_obj_add_event_cb(btn_bank_log, btn_bank_log_cb, LV_EVENT_CLICKED, NULL);
 
     lbl_bank_log = lv_label_create(btn_bank_log);
     lv_label_set_text(lbl_bank_log, LV_SYMBOL_SAVE " START BANK LOG (REC SD)");
     lv_obj_set_style_text_color(lbl_bank_log, lv_color_white(), 0);
-    lv_obj_set_style_text_font(lbl_bank_log, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lbl_bank_log, &lv_font_montserrat_10, 0);
     lv_obj_align(lbl_bank_log, LV_ALIGN_CENTER, 0, 0);
 
     // 6. Create Fullscreen Screensaver Overlay (added on top layer)
@@ -1430,13 +1603,16 @@ static void update_ui() {
     float avgSoc = (count > 0) ? (socSum / count) : 0.0f;
     uint16_t globalDeltaMv = (count > 0 && gMax >= gMin) ? (gMax - gMin) : 0;
 
-    if (alarms && (millis() - s_last_alarm_beep_ms > 30000)) {
+    bool deltaAlert = (globalDeltaMv >= s_alert_delta_thresh_mv);
+    if ((alarms || deltaAlert) && (millis() - s_last_alarm_beep_ms > 30000)) {
         s_last_alarm_beep_ms = millis();
         if (s_is_screen_dimmed) {
             s_is_screen_dimmed = false;
             set_backlight_brightness(BRIGHTNESS_HIGH);
         }
-        BmsAudio.playAlarm();
+        if (s_sound_enabled) {
+            BmsAudio.playAlarm();
+        }
     }
 
     if (Gateway.isConnected()) {
@@ -1474,10 +1650,10 @@ static void update_ui() {
         lv_obj_set_style_arc_color(arc_soc, lv_color_hex(CLR_CYAN), LV_PART_INDICATOR);
     }
 
-    // Update Energy Flow Animation & Colors
-    s_flow_anim_step = (s_flow_anim_step + 1) % 3;
-    const char* arrow_anim_fwd[3] = {"- >", "-- >", "->>"};
-    const char* arrow_anim_rev[3] = {"< -", "< --", "<<-"};
+    // Dynamic chevron animation for realistic energy flow (4-stage smooth motion)
+    s_flow_anim_step = (s_flow_anim_step + 1) % 4;
+    const char* chev_fwd[4] = {" >  ", " >> ", " >>>", ">   "};
+    const char* chev_rev[4] = {"  < ", " << ", "<<< ", "   <"};
 
     if (box_grid && box_inv && box_home && box_bat) {
         // 1. Grid Logic (Simulation / Detection)
@@ -1492,7 +1668,7 @@ static void update_ui() {
             lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_EMERALD), 0);
             lv_label_set_text(lbl_grid_txt, "230V ON");
 
-            lv_label_set_text(lbl_flow_arrow_grid, arrow_anim_fwd[s_flow_anim_step]);
+            lv_label_set_text(lbl_flow_arrow_grid, chev_fwd[s_flow_anim_step]);
             lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_EMERALD), 0);
         } else {
             // Outage / Blackout
@@ -1501,7 +1677,7 @@ static void update_ui() {
             lv_obj_set_style_text_color(lbl_grid_txt, lv_color_hex(CLR_ROSE), 0);
             lv_label_set_text(lbl_grid_txt, "NO GRID");
 
-            lv_label_set_text(lbl_flow_arrow_grid, "x");
+            lv_label_set_text(lbl_flow_arrow_grid, " x ");
             lv_obj_set_style_text_color(lbl_flow_arrow_grid, lv_color_hex(CLR_TEXT_MUTED), 0);
         }
 
@@ -1519,7 +1695,7 @@ static void update_ui() {
             lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(CLR_AMBER), 0);
             lv_label_set_text(lbl_bat_txt, "CHARGE");
 
-            lv_label_set_text(lbl_flow_arrow_bat, arrow_anim_rev[s_flow_anim_step]); // Inv -> Bat
+            lv_label_set_text(lbl_flow_arrow_bat, chev_rev[s_flow_anim_step]); // Inv -> Bat
             lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_AMBER), 0);
         } else if (iSum < -0.5f) {
             // Discharging: Sky Blue / Cyan (or Rose if SOC < 20%)
@@ -1529,7 +1705,7 @@ static void update_ui() {
             lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(batColor), 0);
             lv_label_set_text(lbl_bat_txt, "DISCHARGE");
 
-            lv_label_set_text(lbl_flow_arrow_bat, arrow_anim_fwd[s_flow_anim_step]); // Bat -> Inv
+            lv_label_set_text(lbl_flow_arrow_bat, chev_fwd[s_flow_anim_step]); // Bat -> Inv
             lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(batColor), 0);
         } else {
             // Standby (0A): Green if 100% full, else Slate / Muted Cyan
@@ -1539,7 +1715,7 @@ static void update_ui() {
             lv_obj_set_style_text_color(lbl_bat_txt, lv_color_hex(batColor), 0);
             lv_label_set_text(lbl_bat_txt, (avgSoc >= 99.0f) ? "FULL 100%" : "STANDBY");
 
-            lv_label_set_text(lbl_flow_arrow_bat, "--");
+            lv_label_set_text(lbl_flow_arrow_bat, "---");
             lv_obj_set_style_text_color(lbl_flow_arrow_bat, lv_color_hex(CLR_TEXT_MUTED), 0);
         }
 
@@ -1582,10 +1758,10 @@ static void update_ui() {
         lv_label_set_text(lbl_home_txt, homeTxt);
 
         if (loadPwr > 0.1f) {
-            lv_label_set_text(lbl_flow_arrow_home, arrow_anim_fwd[s_flow_anim_step]);
+            lv_label_set_text(lbl_flow_arrow_home, chev_fwd[s_flow_anim_step]);
             lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(invColor), 0);
         } else {
-            lv_label_set_text(lbl_flow_arrow_home, "--");
+            lv_label_set_text(lbl_flow_arrow_home, "---");
             lv_obj_set_style_text_color(lbl_flow_arrow_home, lv_color_hex(CLR_TEXT_MUTED), 0);
         }
     }
@@ -1644,6 +1820,55 @@ static void update_ui() {
     if (lbl_delta_extremes && count > 0 && gMax >= gMin) {
         snprintf(buf, sizeof(buf), "Min: %.3f V  |  Max: %.3f V", gMin / 1000.0f, gMax / 1000.0f);
         lv_label_set_text(lbl_delta_extremes, buf);
+    }
+
+    // Update Autonomy ETA & Energy Reserve Card
+    if (card_eta && lbl_eta_val) {
+        // Battery bank capacity: e.g. count * 100Ah * 51.2V nominal ~ 5.12 kWh per pack
+        float activePackCount = (count > 0) ? (float)count : 1.0f;
+        float totalCapacityKwh = activePackCount * 5.12f;
+        float remainingKwh = totalCapacityKwh * (avgSoc / 100.0f);
+        float emptyKwh = totalCapacityKwh * ((100.0f - avgSoc) / 100.0f);
+        float curPwrKw = fabsf(totalPwrKw);
+
+        char etaBuf[48];
+        if (iSum < -0.8f && curPwrKw > 0.08f) {
+            // Discharging: Calculate time until depletion
+            float hoursLeft = remainingKwh / curPwrKw;
+            uint32_t totalMin = (uint32_t)(hoursLeft * 60.0f);
+            uint32_t h = totalMin / 60;
+            uint32_t m = totalMin % 60;
+            if (h > 99) h = 99;
+            snprintf(etaBuf, sizeof(etaBuf), "DISCH %uh %02um (%.1f kWh)", h, m, remainingKwh);
+            lv_label_set_text(lbl_eta_val, etaBuf);
+            lv_obj_set_style_text_color(lbl_eta_val, lv_color_hex((avgSoc < 20.0f) ? CLR_ROSE : CLR_BLUE), 0);
+            lv_label_set_text(lbl_eta_icon, LV_SYMBOL_POWER);
+            lv_obj_set_style_text_color(lbl_eta_icon, lv_color_hex((avgSoc < 20.0f) ? CLR_ROSE : CLR_BLUE), 0);
+        } else if (iSum > 0.8f && curPwrKw > 0.08f) {
+            // Charging: Calculate time until 100% full
+            float hoursToFull = emptyKwh / curPwrKw;
+            uint32_t totalMin = (uint32_t)(hoursToFull * 60.0f);
+            uint32_t h = totalMin / 60;
+            uint32_t m = totalMin % 60;
+            if (h > 99) h = 99;
+            snprintf(etaBuf, sizeof(etaBuf), "FULL IN %uh %02um (+%.1fkW)", h, m, curPwrKw);
+            lv_label_set_text(lbl_eta_val, etaBuf);
+            lv_obj_set_style_text_color(lbl_eta_val, lv_color_hex(CLR_EMERALD), 0);
+            lv_label_set_text(lbl_eta_icon, LV_SYMBOL_CHARGE);
+            lv_obj_set_style_text_color(lbl_eta_icon, lv_color_hex(CLR_EMERALD), 0);
+        } else {
+            // Standby or float charge
+            if (avgSoc >= 99.0f) {
+                snprintf(etaBuf, sizeof(etaBuf), "FULL (%.1f / %.1f kWh)", remainingKwh, totalCapacityKwh);
+                lv_obj_set_style_text_color(lbl_eta_val, lv_color_hex(CLR_EMERALD), 0);
+            } else {
+                snprintf(etaBuf, sizeof(etaBuf), "STANDBY (%.1f kWh)", remainingKwh);
+                lv_obj_set_style_text_color(lbl_eta_val, lv_color_hex(CLR_CYAN), 0);
+            }
+            lv_label_set_text(lbl_eta_val, etaBuf);
+            lv_label_set_text(lbl_eta_icon, LV_SYMBOL_OK);
+            lv_obj_set_style_text_color(lbl_eta_icon, lv_color_hex(CLR_CYAN), 0);
+        }
     }
 
     // Update live values on Screensaver glance overlay

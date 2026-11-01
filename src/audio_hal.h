@@ -15,6 +15,7 @@ public:
     void playClick();
     void playAlarm();
     void playBeep(uint32_t freq, uint32_t durationMs);
+    void playTestMelody();
 };
 
 extern AudioAlert BmsAudio;
