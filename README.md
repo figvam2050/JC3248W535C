@@ -355,8 +355,9 @@
 ## 🛠️ 7. Апаратне підключення (Pinout)
 
 <p align="center">
-  <img src="docs/images/board_connectors_spec.jpg" alt="Розташування та призначення роз'ємів JC3248W535" width="100%">
-  <br><em>Апаратні роз'єми плати Guition JC3248W535 (Type-C, RS485 P1 JST 1.25, BAT 2P, TF Slot, Speaker, Boot/Reset)</em>
+  <img src="docs/images/board_pinout_connectors.jpg" width="48%" alt="Розташування роз'ємів на платі Guition JC3248W535">
+  <img src="docs/images/board_pinout_diagram.jpg" width="48%" alt="Розпіновка роз'ємів JC3248W535">
+  <br><em>Апаратні роз'єми плати Guition JC3248W535: P1 (RS-485 5V), P3 (CAN 3.3V), P4 (CAN 1.0mm), P2 (8P GPIO), BAT (2P 3.7V), Type-C, TF Card</em>
 </p>
 
 > ℹ️ Детальний покроковий сервісний посібник з електричного підключення до шини інвертора та акумуляторів дивіться у файлі **[HARDWARE_SERVICE_GUIDE.md](HARDWARE_SERVICE_GUIDE.md)**.
