@@ -72,11 +72,12 @@ void WebGateway::begin(BatteryPack* packs, SemaphoreHandle_t mutex) {
 void WebGateway::tryConnectSTA() {
     _apMode = false;
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     WiFi.begin(_ssid.c_str(), _pass.c_str());
 
     uint32_t startMs = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startMs < 8000) {
-        delay(200);
+    while (WiFi.status() != WL_CONNECTED && millis() - startMs < 20000) {
+        delay(250);
         Serial.print(".");
     }
     Serial.println();
@@ -87,7 +88,7 @@ void WebGateway::tryConnectSTA() {
         configTzTime("EET-2EEST,M3.5.0/3,M10.5.0/4", "pool.ntp.org", "time.google.com", "time.cloudflare.com");
         Serial.println("[NTP] SNTP client started for Europe/Kyiv");
     } else {
-        Serial.println("[Wi-Fi] Failed to connect to saved network. Fallback to AP Mode!");
+        Serial.printf("[Wi-Fi] Failed to connect to saved network (status=%d). Fallback to AP Mode!\n", WiFi.status());
         startAP();
     }
 }
@@ -148,14 +149,22 @@ void WebGateway::loop() {
 }
 
 void WebGateway::setupRoutes() {
-    // Serve exact GZIP-compressed COMBOX dashboard
-    _server->on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    // In AP mode, redirect root to /wifi setup page
+    _server->on("/", HTTP_GET, [this](AsyncWebServerRequest *request){
+        if (_apMode) {
+            request->send(200, "text/html", WIFI_HTML);
+            return;
+        }
         AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html; charset=utf-8", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
         response->addHeader("Content-Encoding", "gzip");
         request->send(response);
     });
 
-    _server->on("/index.html", HTTP_GET, [](AsyncWebServerRequest *request){
+    _server->on("/index.html", HTTP_GET, [this](AsyncWebServerRequest *request){
+        if (_apMode) {
+            request->send(200, "text/html", WIFI_HTML);
+            return;
+        }
         AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html; charset=utf-8", INDEX_HTML_GZ, INDEX_HTML_GZ_LEN);
         response->addHeader("Content-Encoding", "gzip");
         request->send(response);
