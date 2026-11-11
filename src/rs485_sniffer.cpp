@@ -101,19 +101,23 @@ void RS485Sniffer::parseFrame(const uint8_t* frame, size_t len, BatteryPack* pac
 }
 
 void RS485Sniffer::update(BatteryPack* packs, SemaphoreHandle_t mutex) {
-    if (demoMode) {
-        updateDemo(packs, mutex);
-        return;
-    }
-
     if (!_port) return;
 
+    // Always poll physical RS485 port first so incoming traffic can automatically cancel demo mode
     while (_port->available()) {
         uint8_t b = _port->read();
         if (_rxLen < sizeof(_rxBuf)) {
             _rxBuf[_rxLen++] = b;
         } else {
             _rxLen = 0; // Buffer overflow protection
+        }
+    }
+
+    if (demoMode) {
+        // If demo mode is active and we haven't received valid frames yet, run simulation
+        if (_rxLen == 0) {
+            updateDemo(packs, mutex);
+            return;
         }
     }
 

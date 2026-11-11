@@ -12,7 +12,7 @@ public:
     void begin(HardwareSerial* serialPort = &Serial2);
     void update(BatteryPack* packs, SemaphoreHandle_t mutex);
     
-    bool demoMode = true; // Enabled by default until hardware RS485 signal arrives
+    bool demoMode = false; // Default: real RS485 listening (demo only on explicit user toggle)
     void updateDemo(BatteryPack* packs, SemaphoreHandle_t mutex);
 
 private:
