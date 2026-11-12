@@ -151,7 +151,7 @@ void SdLogger::update(const BatteryPack* packs, size_t count) {
         if (f) {
             for (size_t i = 0; i < count; i++) {
                 if (packs[i].isOnline && (packs[i].warningRaw || packs[i].protectionRaw || packs[i].errorRaw)) {
-                    f.printf("%u,%u,%.2f,%.1f,%.0f,0x%04X,0x%04X,0x%04X,%u,%u,%u,%d,%d,%d\n",
+                    f.printf("%u,%u,%.2f,%.1f,%u,0x%04X,0x%04X,0x%04X,%u,%u,%u,%d,%d,%d\n",
                         nowMs,
                         (unsigned int)(i + 1),
                         packs[i].voltage,
