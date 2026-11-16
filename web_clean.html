@@ -467,32 +467,29 @@ canvas{width:100%;height:auto;display:block}
 
 <!-- COMMON: CSV LOGGING CARD -->
 <div class="card" style="margin-top:16px">
-  <h2>📝 Запис CSV-лога (окремий файл для кожної АКБ)</h2>
-  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-    <div>Файлів у записі: <b id="logpath">—</b> · Записано рядків всього: <span id="logrows">0</span></div>
-    <button id="logbtn" onclick="toggleLog()">Старт запису (усі АКБ)</button>
-  </div>
-
-  <div class="log-profiles">
-    <div class="log-profiles-title">Профілі запису <span style="font-weight:400;color:var(--dim)">(можна увімкнути обидва одночасно)</span></div>
-    <label class="log-profile-row">
-      <input type="checkbox" id="cfg_alarm" onchange="saveLogCfg()">
-      <span><b>🚨 Лише аварійні події</b> — регістри 0025–0028 (статус, попередження, захист, помилка) + температура (поріг 0…45&nbsp;°C).
-        Запис виконується лише при зміні стану: поява, зміна або зняття аварії. Без змін — файл не пишеться.</span>
-    </label>
-    <label class="log-profile-row">
-      <input type="checkbox" id="cfg_work" onchange="saveLogCfg()">
-      <span><b>🔬 Аналіз / тест комірок</b> — періодичний запис повної телеметрії з інтервалом
-        <input type="number" id="cfg_interval" min="1" max="3600" step="1" value="5" onchange="saveLogCfg()"> с.</span>
-    </label>
-    <div class="log-profiles-note">
-      Колонка <b>Log</b> у файлі позначає тип рядка: <b>Alarm</b> або <b>Work</b>.
-      Аварійні записи мають пріоритет: якщо в циклі є аварія, плановий запис Work переноситься (без дублювання рядків).
-      Обидва профілі пишуть в один файл кожної АКБ, тому колізій немає.
+  <h2>
+    <span>💾 Файли логів на MicroSD карті</span>
+    <button onclick="fetchLogFilesList()" style="background:#21262d;border:1px solid var(--border);color:var(--fg);padding:4px 10px;font-size:12px">🔄 Оновити список</button>
+  </h2>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+    <div>Стан SD-карти: <span id="sd_card_badge" class="pill ok">Готова</span> · Записано рядків: <span id="logrows">0</span></div>
+    <div style="display:flex;gap:8px">
+      <button id="logbtn" onclick="toggleLog()">Старт запису (усі АКБ)</button>
     </div>
   </div>
 
-  <table class="kv" id="logfiles" style="margin-top:10px"></table>
+  <table class="kv" id="logfiles_table" style="margin-top:10px;width:100%">
+    <thead>
+      <tr style="text-align:left;color:var(--dim);border-bottom:1px solid var(--border)">
+        <th style="padding:6px">Файл логу</th>
+        <th style="padding:6px">Розмір</th>
+        <th style="padding:6px">Дії</th>
+      </tr>
+    </thead>
+    <tbody id="logfiles_tbody">
+      <tr><td colspan="3" style="color:var(--dim);text-align:center;padding:12px">Завантаження списку файлів...</td></tr>
+    </tbody>
+  </table>
 </div>
 
 <div class="foot">
@@ -2249,32 +2246,18 @@ async function tick() {
     document.getElementById('ts').textContent = d.ts || '—';
 
     logOn = d.log_on;
-    document.getElementById('logpath').textContent = d.log_path || '—';
-    document.getElementById('logrows').textContent = d.log_rows || 0;
+    const logrowsEl = document.getElementById('logrows');
+    if (logrowsEl) logrowsEl.textContent = d.log_rows || 0;
     const lb = document.getElementById('logbtn');
-    lb.textContent = logOn ? 'Зупинити запис (усі)' : 'Старт запису (усі АКБ)';
-    lb.className = logOn ? 'off' : '';
-
-    // Logging profiles (v2.4): both checkboxes reflect server-side state
-    const cfg = d.log_cfg || {};
-    const ca = document.getElementById('cfg_alarm');
-    const cw = document.getElementById('cfg_work');
-    const ci = document.getElementById('cfg_interval');
-    if (ca) ca.checked = !!cfg.alarm;
-    if (cw) cw.checked = !!cfg.work;
-    if (ci && document.activeElement !== ci && cfg.work_interval != null) {
-      ci.value = cfg.work_interval;
+    if (lb) {
+      lb.textContent = logOn ? 'Зупинити запис (усі)' : 'Старт запису (усі АКБ)';
+      lb.className = logOn ? 'off' : '';
     }
 
-    const lf = document.getElementById('logfiles');
-    if (lf) {
-      const files = d.log_files || {};
-      const keys = Object.keys(files).sort();
-      lf.innerHTML = keys.length ? keys.map(k => {
-        const f = files[k];
-        const state = f.on ? '<span class="pill ok">запис</span>' : '<span class="pill">стоп</span>';
-        return `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(f.path || '—')}</td><td>${f.rows || 0} · ${escapeHtml(f.last_ts || '—')}</td><td>${state}</td><td style="color:var(--dim);font-size:12px">A ${f.alarm_rows || 0} / W ${f.work_rows || 0}</td></tr>`;
-      }).join('') : '<tr><td>—</td><td>лог ще не створювався</td><td>—</td><td>—</td><td>—</td></tr>';
+    const cardBadge = document.getElementById('sd_card_badge');
+    if (cardBadge) {
+      cardBadge.textContent = d.sd_card ? 'Готова' : 'Відсутня';
+      cardBadge.className = 'pill ' + (d.sd_card ? 'ok' : 'bad');
     }
 
     renderTabs();
@@ -2283,6 +2266,48 @@ async function tick() {
     const c = document.getElementById('conn');
     c.textContent = 'NO SERVER';
     c.className = 'pill bad';
+  }
+}
+
+async function fetchLogFilesList() {
+  const tbody = document.getElementById('logfiles_tbody');
+  if (!tbody) return;
+  try {
+    const res = await fetch('/api/logs');
+    const data = await res.json();
+    const files = data.files || [];
+    if (files.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:var(--dim);text-align:center;padding:12px">Немає CSV файлів на карті пам\'яті</td></tr>';
+      return;
+    }
+    tbody.innerHTML = files.map(f => {
+      const sizeStr = (f.size > 1024 * 1024) 
+        ? (f.size / (1024 * 1024)).toFixed(2) + ' MB'
+        : (f.size / 1024).toFixed(1) + ' KB';
+      return `
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:8px 6px;font-weight:600">📄 ${escapeHtml(f.name)}</td>
+          <td style="padding:8px 6px;color:var(--dim)">${sizeStr}</td>
+          <td style="padding:8px 6px">
+            <a href="/download?file=${encodeURIComponent(f.name)}" download style="display:inline-block;background:#238636;color:#fff;padding:4px 10px;border-radius:5px;text-decoration:none;font-weight:600;font-size:12px;margin-right:6px">⬇️ Скачати</a>
+            <button onclick="deleteLogFile('${escapeHtml(f.name)}')" style="background:#da3633;color:#fff;padding:4px 8px;font-size:12px;border:none;border-radius:5px">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Failed to fetch logs:', err);
+  }
+}
+
+async function deleteLogFile(filename) {
+  if (!confirm(`Ви дійсно бажаєте видалити файл ${filename}?`)) return;
+  try {
+    await fetch(`/delete_log?file=${encodeURIComponent(filename)}`, { method: 'POST' });
+    fetchLogFilesList();
+    tick();
+  } catch (e) {
+    alert('Помилка видалення файлу: ' + e);
   }
 }
 
@@ -2442,5 +2467,7 @@ async function saveLogCfg() {
 
 tick();
 setInterval(tick, 1000);
+fetchLogFilesList();
+setInterval(fetchLogFilesList, 5000);
 initLogViewer();
 </script></body></html>
