@@ -122,8 +122,9 @@ bool SdLogger::deleteAllLogs() {
 void SdLogger::update(const BatteryPack* packs, size_t count) {
     if (!_cardAvailable) return;
 
-    // Log at 1-second intervals
-    if (millis() - _lastLogMs < 1000) return;
+    // Check interval: if _intervalSec == 0, log on every cycle; otherwise wait for interval * 1000 ms
+    uint32_t intervalMs = _intervalSec * 1000;
+    if (_intervalSec > 0 && (millis() - _lastLogMs < intervalMs)) return;
     _lastLogMs = millis();
 
     uint32_t nowMs = millis();

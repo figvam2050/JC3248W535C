@@ -41,6 +41,10 @@ public:
     // Periodic worker
     void update(const BatteryPack* packs, size_t count);
 
+    // Interval between log writes (in seconds, 0 = every update / as fast as possible, max 60)
+    void setIntervalSec(uint32_t sec) { _intervalSec = (sec > 60) ? 60 : sec; }
+    uint32_t getIntervalSec() const { return _intervalSec; }
+
     uint32_t getBankRows() const { return _bankRows; }
     uint32_t getPackRows(uint8_t packIdx) const;
 
@@ -55,6 +59,7 @@ private:
     bool _packLogging[MAX_BATTERIES] = {false};
     uint32_t _packRows[MAX_BATTERIES] = {0};
 
+    uint32_t _intervalSec = 1; // Default 1 second
     uint32_t _lastLogMs = 0;
 };
 

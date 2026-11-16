@@ -205,6 +205,7 @@ void WebGateway::setupRoutes() {
         doc["log_on"] = Logger.isBankLogging();
         doc["log_path"] = Logger.isBankLogging() ? "/bms_bank_log.csv" : nullptr;
         doc["log_rows"] = Logger.getBankRows();
+        doc["log_interval"] = Logger.getIntervalSec();
         doc["sd_card"] = Logger.isAvailable();
         doc["rssi"] = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : 0;
         doc["ts"] = "Online";
@@ -400,6 +401,12 @@ void WebGateway::setupRoutes() {
         DeserializationError err = deserializeJson(reqDoc, data, len);
         if (!err) {
             bool on = reqDoc["on"] | false;
+            if (reqDoc.containsKey("interval")) {
+                int sec = reqDoc["interval"].as<int>();
+                if (sec >= 0 && sec <= 60) {
+                    Logger.setIntervalSec(sec);
+                }
+            }
             if (reqDoc.containsKey("addr")) {
                 const char* addrStr = reqDoc["addr"];
                 uint8_t packAddr = 0;

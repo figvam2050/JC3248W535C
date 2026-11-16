@@ -517,6 +517,38 @@ canvas{width:100%;height:auto;display:block}
   <div class="modal-box" id="alarm_modal_content"></div>
 </div>
 
+<!-- LOG INTERVAL SELECTION MODAL -->
+<div id="log_interval_modal" class="modal-overlay">
+  <div class="modal-box" style="max-width:440px;text-align:center">
+    <h3 style="margin-top:0;color:var(--acc);font-size:18px">⏱️ Налаштування інтервалу запису логу</h3>
+    <p style="color:var(--dim);font-size:13px;line-height:1.5">
+      Оберіть інтервал між записами у CSV-файл на картку пам'яті:
+    </p>
+    
+    <div style="margin:20px 0;background:#0d1117;padding:16px;border-radius:10px;border:1px solid var(--border)">
+      <div style="font-size:26px;font-weight:700;color:var(--fg);margin-bottom:10px" id="modal_interval_val">1 с</div>
+      <input type="range" id="modal_interval_slider" min="0" max="60" step="1" value="1" 
+             style="width:100%;accent-color:var(--acc);cursor:pointer"
+             oninput="updateLogIntervalDisplay(this.value)">
+      <div style="display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin-top:6px">
+        <span>0 с (все підряд)</span>
+        <span>10 с</span>
+        <span>30 с</span>
+        <span>60 с (1 хв)</span>
+      </div>
+    </div>
+    
+    <p id="modal_interval_hint" style="font-size:12px;color:var(--dim);margin-bottom:20px">
+      Запис 1 раз на 1 секунду
+    </p>
+
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="confirmLogStart()" style="background:#238636;color:#fff;padding:10px 20px;font-size:14px;border:none">▶️ Почати запис</button>
+      <button onclick="closeLogIntervalModal()" style="background:#30363d;color:#fff;padding:10px 16px;font-size:14px;border:none">✕ Скасувати</button>
+    </div>
+  </div>
+</div>
+
 <!-- DIAGNOSTIC REPORT MODAL -->
 <div id="report_modal">
   <div class="report-actions">
@@ -2306,24 +2338,94 @@ async function triggerRescan() {
   setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = '🔄 Пересканувати всі 16'; } }, 2500);
 }
 
-async function toggleLog() {
+let s_pendingLogTarget = null; // null = all packs, or string addr (e.g. '0x01')
+
+function updateLogIntervalDisplay(val) {
+  val = parseInt(val) || 0;
+  const disp = document.getElementById('modal_interval_val');
+  const hint = document.getElementById('modal_interval_hint');
+  if (disp) {
+    if (val === 0) {
+      disp.textContent = '0 с (Все підряд)';
+    } else if (val === 60) {
+      disp.textContent = '60 с (1 хвилина)';
+    } else {
+      disp.textContent = val + ' с';
+    }
+  }
+  if (hint) {
+    if (val === 0) {
+      hint.textContent = '⚡ Максимальна деталізація: запис кожного прийнятого кадру телеметрії';
+    } else {
+      hint.textContent = `Запис телеметрії кожні ${val} с`;
+    }
+  }
+}
+
+function openLogIntervalModal(targetAddr) {
+  s_pendingLogTarget = targetAddr;
+  const modal = document.getElementById('log_interval_modal');
+  const slider = document.getElementById('modal_interval_slider');
+  if (slider) {
+    slider.value = (latestData && latestData.log_interval !== undefined) ? latestData.log_interval : 1;
+    updateLogIntervalDisplay(slider.value);
+  }
+  if (modal) modal.style.display = 'block';
+}
+
+function closeLogIntervalModal() {
+  const modal = document.getElementById('log_interval_modal');
+  if (modal) modal.style.display = 'none';
+  s_pendingLogTarget = null;
+}
+
+async function confirmLogStart() {
+  const slider = document.getElementById('modal_interval_slider');
+  const intervalSec = slider ? parseInt(slider.value) : 1;
+  const target = s_pendingLogTarget;
+  closeLogIntervalModal();
+
+  const body = { on: true, interval: intervalSec };
+  if (target) body.addr = target;
+
   await fetch('/api/log', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ on: !logOn })
+    body: JSON.stringify(body)
   });
   tick();
+}
+
+async function toggleLog() {
+  if (logOn) {
+    // If already recording, stop without popup
+    await fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ on: false })
+    });
+    tick();
+  } else {
+    // Open interval dialog from 0 to 60 sec with step 1 sec
+    openLogIntervalModal(null);
+  }
 }
 
 async function togglePackLog() {
   if (!currentPackAddr) return;
   const p = (latestData && latestData.packs) ? (latestData.packs[currentPackAddr] || {}) : {};
-  await fetch('/api/log', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ on: !p.log_on, addr: currentPackAddr })
-  });
-  tick();
+  if (p.log_on) {
+    // If already recording, stop without popup
+    await fetch('/api/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ on: false, addr: currentPackAddr })
+    });
+    tick();
+  } else {
+    // Open interval dialog from 0 to 60 sec with step 1 sec
+    openLogIntervalModal(currentPackAddr);
+  }
 }
 
 async function saveLogCfg() {
