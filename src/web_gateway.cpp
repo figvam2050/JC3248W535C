@@ -419,13 +419,46 @@ void WebGateway::setupRoutes() {
     });
 
     // Toggle or set Master / Sniffer mode via API
-    // GET or POST /api/mode?active=1 (or ?active=0)
-    _server->on("/api/mode", HTTP_ANY, [](AsyncWebServerRequest *request){
+    // GET /api/mode?active=1 (or ?mode=active or ?toggle=1)
+    // POST /api/mode with JSON body {"mode": "active"|"passive"} or URL params
+    _server->on("/api/mode", HTTP_GET, [](AsyncWebServerRequest *request){
         if (request->hasParam("active")) {
             String val = request->getParam("active")->value();
             bool active = (val == "1" || val == "true");
             Sniffer.setActiveMaster(active);
+        } else if (request->hasParam("mode")) {
+            String val = request->getParam("mode")->value();
+            Sniffer.setActiveMaster(val == "active");
         } else if (request->hasParam("toggle")) {
+            Sniffer.setActiveMaster(!Sniffer.isActiveMaster());
+        }
+        DynamicJsonDocument resp(128);
+        resp["active_master"] = Sniffer.isActiveMaster();
+        resp["mode"] = Sniffer.isActiveMaster() ? "active" : "passive";
+        String out;
+        serializeJson(resp, out);
+        request->send(200, "application/json", out);
+    });
+
+    _server->on("/api/mode", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+      [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        if (request->hasParam("mode")) {
+            String val = request->getParam("mode")->value();
+            Sniffer.setActiveMaster(val == "active");
+        } else if (request->hasParam("active")) {
+            String val = request->getParam("active")->value();
+            Sniffer.setActiveMaster(val == "1" || val == "true");
+        } else if (len > 0) {
+            DynamicJsonDocument reqDoc(256);
+            if (!deserializeJson(reqDoc, data, len)) {
+                if (reqDoc.containsKey("mode")) {
+                    const char* m = reqDoc["mode"];
+                    Sniffer.setActiveMaster(strcmp(m, "active") == 0);
+                } else if (reqDoc.containsKey("active")) {
+                    Sniffer.setActiveMaster(reqDoc["active"].as<bool>());
+                }
+            }
+        } else {
             Sniffer.setActiveMaster(!Sniffer.isActiveMaster());
         }
         DynamicJsonDocument resp(128);
