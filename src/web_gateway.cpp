@@ -195,11 +195,12 @@ void WebGateway::setupRoutes() {
     _server->on("/api/data", HTTP_GET, [this](AsyncWebServerRequest *request){
         DynamicJsonDocument doc(16384);
 
-        doc["mode"] = "passive";
+        doc["mode"] = Sniffer.isActiveMaster() ? "active" : "passive";
+        doc["active_master"] = Sniffer.isActiveMaster();
         doc["demo"] = Sniffer.demoMode;
         doc["is_scanning"] = false;
         doc["scan_msg"] = "";
-        doc["port"] = "UART2 (GPIO 44)";
+        doc["port"] = Sniffer.isActiveMaster() ? "UART2 (GPIO 44 RX / GPIO 43 TX)" : "UART2 (GPIO 44 RX)";
         doc["baud"] = 9600;
         doc["log_on"] = Logger.isBankLogging();
         doc["log_path"] = Logger.isBankLogging() ? "/bms_bank_log.csv" : nullptr;
@@ -415,6 +416,24 @@ void WebGateway::setupRoutes() {
             }
         }
         request->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
+    // Toggle or set Master / Sniffer mode via API
+    // GET or POST /api/mode?active=1 (or ?active=0)
+    _server->on("/api/mode", HTTP_ANY, [](AsyncWebServerRequest *request){
+        if (request->hasParam("active")) {
+            String val = request->getParam("active")->value();
+            bool active = (val == "1" || val == "true");
+            Sniffer.setActiveMaster(active);
+        } else if (request->hasParam("toggle")) {
+            Sniffer.setActiveMaster(!Sniffer.isActiveMaster());
+        }
+        DynamicJsonDocument resp(128);
+        resp["active_master"] = Sniffer.isActiveMaster();
+        resp["mode"] = Sniffer.isActiveMaster() ? "active" : "passive";
+        String out;
+        serializeJson(resp, out);
+        request->send(200, "application/json", out);
     });
 
     // List CSV log files on SD card

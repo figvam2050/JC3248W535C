@@ -163,6 +163,8 @@ static ScreenSleepMode s_sleep_mode = SLEEP_MODE_SAVER;
 
 // Settings Controls & Widgets
 static lv_obj_t *sw_demo = NULL;
+static lv_obj_t *sw_rs485_mode = NULL;
+static lv_obj_t *lbl_rs485_mode_status = NULL;
 static lv_obj_t *dropdown_delta_thresh = NULL;
 static lv_obj_t *lbl_wifi_scan_res = NULL;
 static uint16_t s_alert_delta_thresh_mv = 50; // Default 50mV
@@ -787,6 +789,22 @@ static void sw_demo_cb(lv_event_t *e) {
     if (s_sound_enabled) BmsAudio.playClick();
 }
 
+static void sw_rs485_mode_cb(lv_event_t *e) {
+    lv_obj_t *sw = lv_event_get_target(e);
+    bool active = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    Sniffer.setActiveMaster(active);
+    if (lbl_rs485_mode_status) {
+        if (active) {
+            lv_label_set_text(lbl_rs485_mode_status, "ACTIVE MASTER (Bench Polling 1..4)");
+            lv_obj_set_style_text_color(lbl_rs485_mode_status, lv_color_hex(CLR_EMERALD), 0);
+        } else {
+            lv_label_set_text(lbl_rs485_mode_status, "PASSIVE SNIFFER (Inverter Safe, RX only)");
+            lv_obj_set_style_text_color(lbl_rs485_mode_status, lv_color_hex(CLR_CYAN), 0);
+        }
+    }
+    if (s_sound_enabled) BmsAudio.playClick();
+}
+
 static void scr_test_next_step() {
     if (!scr_test_overlay) return;
     s_scr_test_step++;
@@ -994,9 +1012,44 @@ static void create_settings_tab() {
     lv_obj_set_style_text_font(lbl_audio_btn, &lv_font_montserrat_12, 0);
     lv_obj_align(lbl_audio_btn, LV_ALIGN_CENTER, 0, 0);
 
-    // 3. Simulation & Protection Thresholds Card (116px, moved to 328)
+    // 3. RS-485 Communication Mode (Passive Sniffer vs Active Master) (100px, moved to 328)
+    lv_obj_t *card_comm_mode = create_glass_card(tab_settings, 308, 100);
+    lv_obj_align(card_comm_mode, LV_ALIGN_TOP_MID, 0, 328);
+
+    lv_obj_t *lbl_comm_title = lv_label_create(card_comm_mode);
+    lv_label_set_text(lbl_comm_title, LV_SYMBOL_CHARGE " RS-485 COMM MODE");
+    lv_obj_set_style_text_color(lbl_comm_title, lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_comm_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(lbl_comm_title, LV_ALIGN_TOP_LEFT, 2, 2);
+
+    lv_obj_t *lbl_mode_switch_desc = lv_label_create(card_comm_mode);
+    lv_label_set_text(lbl_mode_switch_desc, "ACTIVE POLLING (TEST BENCH):");
+    lv_obj_set_style_text_color(lbl_mode_switch_desc, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_mode_switch_desc, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_mode_switch_desc, 2, 26);
+
+    sw_rs485_mode = lv_switch_create(card_comm_mode);
+    lv_obj_set_size(sw_rs485_mode, 48, 22);
+    lv_obj_set_pos(sw_rs485_mode, 236, 22);
+    if (Sniffer.isActiveMaster()) lv_obj_add_state(sw_rs485_mode, LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(sw_rs485_mode, lv_color_hex(CLR_EMERALD), LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_add_event_cb(sw_rs485_mode, sw_rs485_mode_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lbl_rs485_mode_status = lv_label_create(card_comm_mode);
+    lv_label_set_text(lbl_rs485_mode_status, Sniffer.isActiveMaster() ? "ACTIVE MASTER (Bench Polling 1..4)" : "PASSIVE SNIFFER (Inverter Safe, RX only)");
+    lv_obj_set_style_text_color(lbl_rs485_mode_status, Sniffer.isActiveMaster() ? lv_color_hex(CLR_EMERALD) : lv_color_hex(CLR_CYAN), 0);
+    lv_obj_set_style_text_font(lbl_rs485_mode_status, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_rs485_mode_status, 2, 54);
+
+    lv_obj_t *lbl_rs485_mode_hint = lv_label_create(card_comm_mode);
+    lv_label_set_text(lbl_rs485_mode_hint, "Passive = zero collision on bus. Active = bench testing.");
+    lv_obj_set_style_text_color(lbl_rs485_mode_hint, lv_color_hex(CLR_TEXT_MUTED), 0);
+    lv_obj_set_style_text_font(lbl_rs485_mode_hint, &lv_font_montserrat_10, 0);
+    lv_obj_set_pos(lbl_rs485_mode_hint, 2, 70);
+
+    // 4. Simulation & Protection Thresholds Card (116px, moved to 434)
     lv_obj_t *card_sim = create_glass_card(tab_settings, 308, 116);
-    lv_obj_align(card_sim, LV_ALIGN_TOP_MID, 0, 328);
+    lv_obj_align(card_sim, LV_ALIGN_TOP_MID, 0, 434);
 
     lv_obj_t *lbl_sim_title = lv_label_create(card_sim);
     lv_label_set_text(lbl_sim_title, LV_SYMBOL_REFRESH " SIMULATION & ALARM LIMITS");
@@ -1040,9 +1093,9 @@ static void create_settings_tab() {
     lv_obj_set_style_radius(dropdown_delta_thresh, 8, 0);
     lv_obj_add_event_cb(dropdown_delta_thresh, dropdown_delta_thresh_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // 4. Wi-Fi Scanner & Network Card (136px, moved to 450)
+    // 5. Wi-Fi Scanner & Network Card (136px, moved to 556)
     lv_obj_t *card_wifi = create_glass_card(tab_settings, 308, 136);
-    lv_obj_align(card_wifi, LV_ALIGN_TOP_MID, 0, 450);
+    lv_obj_align(card_wifi, LV_ALIGN_TOP_MID, 0, 556);
 
     lv_obj_t *lbl_wifi_title = lv_label_create(card_wifi);
     lv_label_set_text(lbl_wifi_title, LV_SYMBOL_WIFI " WI-FI CONTROL");
@@ -1088,9 +1141,9 @@ static void create_settings_tab() {
     lv_obj_set_style_text_font(lbl_wifi_scan_res, &lv_font_montserrat_10, 0);
     lv_obj_set_pos(lbl_wifi_scan_res, 4, 30);
 
-    // 5. System & Network Diagnostics Card (140px, moved to 592)
+    // 6. System & Network Diagnostics Card (140px, moved to 698)
     lv_obj_t *card_sys = create_glass_card(tab_settings, 308, 140);
-    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 592);
+    lv_obj_align(card_sys, LV_ALIGN_TOP_MID, 0, 698);
 
     lv_obj_t *lbl_sys_title = lv_label_create(card_sys);
     lv_label_set_text(lbl_sys_title, LV_SYMBOL_SETTINGS " HARDWARE SPECIFICATION");

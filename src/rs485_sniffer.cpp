@@ -20,9 +20,46 @@ uint16_t RS485Sniffer::calculateCRC(const uint8_t* buf, size_t len) {
 
 void RS485Sniffer::begin(HardwareSerial* serialPort) {
     _port = serialPort;
-    // Passive sniffer on GPIO 44 (RX only, TX not used)
+    // Default: Passive sniffer on GPIO 44 (RX only, TX not used)
     _port->begin(9600, SERIAL_8N1, RS485_RX_PIN, -1);
     _rxLen = 0;
+    _activeMaster = false;
+    _lastPollMs = 0;
+    _pollAddr = 1;
+}
+
+void RS485Sniffer::setActiveMaster(bool enable) {
+    if (_activeMaster == enable) return;
+    _activeMaster = enable;
+    if (_port) {
+        _port->end();
+        // When active master: enable TX pin (GPIO 43). Hardware isolated module has auto-direction.
+        // When passive sniffer: disable TX pin (-1) to guarantee zero interference on inverter bus.
+        _port->begin(9600, SERIAL_8N1, RS485_RX_PIN, enable ? RS485_TX_PIN : -1);
+    }
+    _rxLen = 0;
+    _lastPollMs = millis();
+    _pollAddr = 1;
+}
+
+void RS485Sniffer::sendPollFrame(uint8_t addr) {
+    if (!_port || !_activeMaster) return;
+
+    // Modbus RTU Read Holding Registers (FC 0x03):
+    // [addr, 0x03, reg_hi=0x00, reg_lo=0x00, count_hi=0x00, count_lo=0x28 (40 regs), crc_lo, crc_hi]
+    uint8_t pollReq[8] = {
+        addr,
+        0x03,
+        0x00, 0x00,
+        0x00, 0x28,
+        0x00, 0x00
+    };
+    uint16_t crc = calculateCRC(pollReq, 6);
+    pollReq[6] = crc & 0xFF;
+    pollReq[7] = (crc >> 8) & 0xFF;
+
+    _port->write(pollReq, 8);
+    _port->flush();
 }
 
 void RS485Sniffer::parseFrame(const uint8_t* frame, size_t len, BatteryPack* packs, SemaphoreHandle_t mutex) {
@@ -157,6 +194,19 @@ void RS485Sniffer::update(BatteryPack* packs, SemaphoreHandle_t mutex) {
             }
         }
         xSemaphoreGive(mutex);
+    }
+
+    // Active Master Polling: If enabled and not in demo mode, cycle through battery addresses
+    if (_activeMaster && !demoMode) {
+        // Poll every 250ms per pack (gives enough time for pack response ~85 bytes @ 9600 baud takes ~88ms)
+        if (now - _lastPollMs >= 250) {
+            _lastPollMs = now;
+            sendPollFrame(_pollAddr);
+            _pollAddr++;
+            if (_pollAddr > _maxPollAddrs) {
+                _pollAddr = 1;
+            }
+        }
     }
 }
 
